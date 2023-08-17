@@ -22,6 +22,7 @@
     - AWS PowerShell Module or AWS CLI must be installed.
     - Supported 7-Zip formats include 7z, zip, rar, gz, tar, and bz2.
 #>
+
 [CmdletBinding()]
 param (
     [Parameter(Mandatory=$true)]
@@ -66,27 +67,51 @@ if (-not (Get-Module -ListAvailable -Name 'AWSPowerShell')) {
     }
 }
 
-# Process files in parallel using ForEach-Object -Parallel
-$archiveFiles | ForEach-Object -Parallel {
-    $file = $_
-    $key = $using:Prefix + $file.Name
+# Create a script block for the job
+$jobScript = {
+    param (
+        $file,
+        $BucketName,
+        $Prefix
+    )
 
-    Write-Verbose "Copying $($file.Name) to S3 bucket $using:BucketName with prefix $using:Prefix"
+    $key = $Prefix + $file.Name
+
+    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
 
     try {
         if (Get-Module -ListAvailable -Name 'AWSPowerShell') {
-            Write-S3Object -BucketName $using:BucketName -File $file.FullName -Key $key
+            Write-S3Object -BucketName $BucketName -File $file.FullName -Key $key
         }
         else {
-            aws s3 cp $file.FullName s3://$using:BucketName/$key
+            aws s3 cp $file.FullName s3://$BucketName/$key
         }
 
-        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $using:BucketName with prefix $using:Prefix"
+        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
     }
     catch {
         Write-Error "Failed to copy $($file.Name) to S3. Error: $_"
     }
-} -ThrottleLimit $MaxParallelFiles
+}
+
+# Start jobs in parallel
+$jobs = @()
+foreach ($file in $archiveFiles) {
+    while (@(Get-Job | Where-Object { $_.State -eq 'Running' }).Count -ge $MaxParallelFiles) {
+        Start-Sleep -Milliseconds 100
+    }
+
+    $jobs += Start-Job -ScriptBlock $jobScript -ArgumentList $file, $BucketName, $Prefix
+}
+
+# Wait for all jobs to complete
+$jobs | Wait-Job
+
+# Receive job output and remove jobs
+$jobs | ForEach-Object {
+    Receive-Job -Job $_
+    Remove-Job -Job $_
+}
 
 # Inform the user about the number of files transferred
 Write-Output "Completed copying $($archiveFiles.Count) files to S3 bucket $BucketName."
