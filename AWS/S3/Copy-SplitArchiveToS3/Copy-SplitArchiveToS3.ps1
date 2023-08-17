@@ -66,72 +66,27 @@ if (-not (Get-Module -ListAvailable -Name 'AWSPowerShell')) {
     }
 }
 
-# Function to copy file to S3 using PowerShell Module
-function CopyFileToS3_PowerShell {
-    param (
-        [System.IO.FileInfo]$file
-    )
+# Process files in parallel using ForEach-Object -Parallel
+$archiveFiles | ForEach-Object -Parallel {
+    $file = $_
+    $key = $using:Prefix + $file.Name
 
-    $key = $Prefix + $file.Name
-
-    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
+    Write-Verbose "Copying $($file.Name) to S3 bucket $using:BucketName with prefix $using:Prefix"
 
     try {
-        Write-S3Object -BucketName $BucketName -File $file.FullName -Key $key
-        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
-    }
-    catch {
-        Write-Error "Failed to copy $($file.Name) to S3. Error: $_"
-    }
-}
-
-# Function to copy file to S3 using AWS CLI
-function CopyFileToS3_CLI {
-    param (
-        [System.IO.FileInfo]$file
-    )
-
-    $key = $Prefix + $file.Name
-
-    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
-
-    try {
-        aws s3 cp $file.FullName s3://$BucketName/$key
-        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
-    }
-    catch {
-        Write-Error "Failed to copy $($file.Name) to S3. Error: $_"
-    }
-}
-
-# Check and process files in parallel
-$runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxParallelFiles)
-$runspacePool.Open()
-
-$runspaces = @()
-
-foreach ($file in $archiveFiles) {
-    $runspace = [powershell]::Create().AddScript({
         if (Get-Module -ListAvailable -Name 'AWSPowerShell') {
-            CopyFileToS3_PowerShell -file $using:file
+            Write-S3Object -BucketName $using:BucketName -File $file.FullName -Key $key
         }
         else {
-            CopyFileToS3_CLI -file $using:file
+            aws s3 cp $file.FullName s3://$using:BucketName/$key
         }
-    })
 
-    $runspace.RunspacePool = $runspacePool
-    $runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
-}
-
-# Wait for all runspaces to complete
-$runspaces | ForEach-Object {
-    $_.Pipe.EndInvoke($_.Status)
-    $_.Pipe.Dispose()
-}
-
-$runspacePool.Close()
-$runspacePool.Dispose()
+        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $using:BucketName with prefix $using:Prefix"
+    }
+    catch {
+        Write-Error "Failed to copy $($file.Name) to S3. Error: $_"
+    }
+} -ThrottleLimit $MaxParallelFiles
 
 # Inform the user about the number of files transferred
 Write-Output "Completed copying $($archiveFiles.Count) files to S3 bucket $BucketName."
