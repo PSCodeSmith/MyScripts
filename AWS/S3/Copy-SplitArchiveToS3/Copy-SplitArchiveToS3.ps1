@@ -96,7 +96,7 @@ foreach ($file in $archiveFiles) {
         Start-Sleep -Milliseconds 100
     }
 
-    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName/$Prefix"
+    Write-Output "Copying $($file.Name) to S3 bucket $BucketName/$Prefix"
     $jobs += Start-Job -ScriptBlock $jobScript -ArgumentList $file, $BucketName, $Prefix
 }
 
