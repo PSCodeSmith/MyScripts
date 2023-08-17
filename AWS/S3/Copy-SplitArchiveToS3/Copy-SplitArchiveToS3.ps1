@@ -59,8 +59,8 @@ $archiveFiles = Get-ChildItem -Path $localPathWithWildcard -Include $includePatt
 Write-Output "Found $($archiveFiles.Count) files. Beginning to transfer files to S3 bucket $BucketName."
 
 # Check for AWS PowerShell Module or AWS CLI
-if (-not (Get-Module -ListAvailable -Name 'AWSPowerShell')) {
-    if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+    if (-not (Get-Module -ListAvailable -Name 'AWSPowerShell')) {
         Write-Error "Neither AWS PowerShell Module nor AWS CLI is installed. Please install one of them to proceed."
         return
     }
@@ -77,11 +77,11 @@ $jobScript = {
     $key = $Prefix + $file.Name
 
     try {
-        if (Get-Module -ListAvailable -Name 'AWSPowerShell') {
-            Write-S3Object -BucketName $BucketName -File $file.FullName -Key $key
-        }
-        else {
+        if (Get-Command aws -ErrorAction SilentlyContinue) {
             aws s3 cp $file.FullName s3://$BucketName/$key
+        }
+        elseif (Get-Module -ListAvailable -Name 'AWSPowerShell') {
+            Write-S3Object -BucketName $BucketName -File $file.FullName -Key $key
         }
     }
     catch {
