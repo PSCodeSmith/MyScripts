@@ -22,7 +22,6 @@
     - AWS PowerShell Module or AWS CLI must be installed.
     - Supported 7-Zip formats include 7z, zip, rar, gz, tar, and bz2.
 #>
-
 [CmdletBinding()]
 param (
     [Parameter(Mandatory=$true)]
@@ -77,8 +76,6 @@ $jobScript = {
 
     $key = $Prefix + $file.Name
 
-    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
-
     try {
         if (Get-Module -ListAvailable -Name 'AWSPowerShell') {
             Write-S3Object -BucketName $BucketName -File $file.FullName -Key $key
@@ -86,8 +83,6 @@ $jobScript = {
         else {
             aws s3 cp $file.FullName s3://$BucketName/$key
         }
-
-        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
     }
     catch {
         Write-Error "Failed to copy $($file.Name) to S3. Error: $_"
@@ -101,6 +96,7 @@ foreach ($file in $archiveFiles) {
         Start-Sleep -Milliseconds 100
     }
 
+    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName/$Prefix"
     $jobs += Start-Job -ScriptBlock $jobScript -ArgumentList $file, $BucketName, $Prefix
 }
 
