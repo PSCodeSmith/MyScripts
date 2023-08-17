@@ -22,7 +22,6 @@
     - AWS PowerShell Module or AWS CLI must be installed.
     - Supported 7-Zip formats include 7z, zip, rar, gz, tar, and bz2.
 #>
-
 [CmdletBinding()]
 param (
     [Parameter(Mandatory=$true)]
@@ -40,6 +39,24 @@ param (
 if ($Prefix -ne "" -and -not $Prefix.EndsWith("/")) {
     $Prefix += "/"
 }
+
+# Ensure that LocalPath ends with a backslash and wildcard
+$localPathWithWildcard = $LocalPath
+if (-not $localPathWithWildcard.EndsWith("\*")) {
+    if (-not $localPathWithWildcard.EndsWith("\")) {
+        $localPathWithWildcard += "\"
+    }
+    $localPathWithWildcard += "*"
+}
+
+# Include patterns to capture all split files
+$includePatterns = @('*.7z.*', '*.zip.*', '*.rar.*', '*.gz.*', '*.tar.*', '*.bz2.*')
+
+# Get the list of split archive files created with 7-Zip formats
+$archiveFiles = Get-ChildItem -Path $localPathWithWildcard -Include $includePatterns -Recurse
+
+# Inform the user about the number of files to be transferred
+Write-Output "Found $($archiveFiles.Count) files. Beginning to transfer files to S3 bucket $BucketName."
 
 # Check for AWS PowerShell Module or AWS CLI
 if (-not (Get-Module -ListAvailable -Name 'AWSPowerShell')) {
@@ -87,9 +104,6 @@ function CopyFileToS3_CLI {
     }
 }
 
-# Get the list of split archive files created with 7-Zip formats
-$archiveFiles = Get-ChildItem -Path $LocalPath -Filter '*.7z,*.zip,*.rar,*.gz,*.tar,*.bz2'
-
 # Check and process files in parallel
 $runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxParallelFiles)
 $runspacePool.Open()
@@ -119,4 +133,5 @@ $runspaces | ForEach-Object {
 $runspacePool.Close()
 $runspacePool.Dispose()
 
-Write-Output "Completed copying files to S3 bucket $BucketName."
+# Inform the user about the number of files transferred
+Write-Output "Completed copying $($archiveFiles.Count) files to S3 bucket $BucketName."
