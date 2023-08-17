@@ -3,8 +3,7 @@
     Copies split archive files created with 7-Zip to an S3 bucket in parallel.
 
 .DESCRIPTION
-    The Copy-SplitArchiveToS3 script is designed to efficiently transfer split archive files created with 7-Zip to an Amazon S3 bucket.
-    It supports parallel processing and can utilize either the AWS PowerShell Module or the AWS CLI, depending on what's installed on the system.
+    The Copy-SplitArchiveToS3 script copies split archive files created with 7-Zip to an Amazon S3 bucket in parallel. It supports various archive formats and can utilize either the AWS PowerShell Module or AWS CLI.
 
 .PARAMETER BucketName
     Specifies the name of the S3 bucket where the files will be copied. This parameter is mandatory.
@@ -15,27 +14,13 @@
 .PARAMETER MaxParallelFiles
     Specifies the maximum number of files to be transferred in parallel. The default value is 5.
 
-.INPUTS
-    None. You cannot pipe input to this script.
-
-.OUTPUTS
-    Verbose and error messages indicating the progress and status of the copy operation.
-
-.EXAMPLE
-    .\Copy-SplitArchiveToS3.ps1 -BucketName 'your-bucket-name' -LocalPath 'C:\path\to\archive\files'
-
-    Copies all split archive files from the specified local directory to the specified S3 bucket, processing up to 5 files in parallel.
+.PARAMETER Prefix
+    Specifies an optional prefix (folder path) within the S3 bucket where the files will be copied. If provided, the script ensures that it ends with a backslash. This parameter is optional.
 
 .NOTES
-    - The AWS access key, secret key, and region must be configured as environment variables.
-    - The script checks for the availability of the AWS PowerShell Module or AWS CLI and proceeds accordingly.
+    - AWS credentials configured as environment variables are required.
+    - AWS PowerShell Module or AWS CLI must be installed.
     - Supported 7-Zip formats include 7z, zip, rar, gz, tar, and bz2.
-    - Ensure that the IAM user has the necessary permissions to write objects to the specified S3 bucket.
-
-.LINK
-    https://aws.amazon.com/powershell/
-    https://aws.amazon.com/cli/
-
 #>
 
 [CmdletBinding()]
@@ -46,28 +31,23 @@ param (
     [Parameter(Mandatory=$true)]
     [string]$LocalPath,
 
-    [int]$MaxParallelFiles = 5
+    [int]$MaxParallelFiles = 5,
+
+    [string]$Prefix = ""
 )
 
-# Check if the AWS PowerShell Module is installed
-$usingAWSPowerShell = $false
-$usingAWSCLI = $false
-
-if (Get-Module -ListAvailable -Name 'AWSPowerShell') {
-    $usingAWSPowerShell = $true
-    Import-Module AWSPowerShell
-}
-elseif (Get-Command aws -ErrorAction SilentlyContinue) {
-    $usingAWSCLI = $true
-}
-else {
-    Write-Error "Neither AWS PowerShell Module nor AWS CLI is installed. Please install one of them and try again."
-    return
+# Ensure that Prefix ends with a backslash
+if ($Prefix -ne "" -and -not $Prefix.EndsWith("/")) {
+    $Prefix += "/"
 }
 
-# Get the list of files to be copied (considering 7-Zip supported formats)
-$archiveExtensions = @("*.7z.*", "*.zip.*", "*.rar.*", "*.gz.*", "*.tar.*", "*.bz2.*")
-$files = $archiveExtensions | ForEach-Object { Get-ChildItem -Path $LocalPath -Filter $_ }
+# Check for AWS PowerShell Module or AWS CLI
+if (-not (Get-Module -ListAvailable -Name 'AWSPowerShell')) {
+    if (-not (Get-Command aws -ErrorAction SilentlyContinue)) {
+        Write-Error "Neither AWS PowerShell Module nor AWS CLI is installed. Please install one of them to proceed."
+        return
+    }
+}
 
 # Function to copy file to S3 using PowerShell Module
 function CopyFileToS3_PowerShell {
@@ -75,11 +55,13 @@ function CopyFileToS3_PowerShell {
         [System.IO.FileInfo]$file
     )
 
-    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName"
+    $key = $Prefix + $file.Name
+
+    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
 
     try {
-        Write-S3Object -BucketName $BucketName -File $file.FullName -Key $file.Name
-        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName"
+        Write-S3Object -BucketName $BucketName -File $file.FullName -Key $key
+        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
     }
     catch {
         Write-Error "Failed to copy $($file.Name) to S3. Error: $_"
@@ -92,23 +74,49 @@ function CopyFileToS3_CLI {
         [System.IO.FileInfo]$file
     )
 
-    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName"
+    $key = $Prefix + $file.Name
+
+    Write-Verbose "Copying $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
 
     try {
-        aws s3 cp $file.FullName s3://$BucketName/$($file.Name)
-        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName"
+        aws s3 cp $file.FullName s3://$BucketName/$key
+        Write-Verbose "Successfully copied $($file.Name) to S3 bucket $BucketName with prefix $Prefix"
     }
     catch {
         Write-Error "Failed to copy $($file.Name) to S3. Error: $_"
     }
 }
 
-# Copy files in parallel using the appropriate method
-$files | ForEach-Object -Parallel {
-    if ($usingAWSPowerShell) {
-        CopyFileToS3_PowerShell -file $_
-    }
-    elseif ($usingAWSCLI) {
-        CopyFileToS3_CLI -file $_
-    }
-} -ThrottleLimit $MaxParallelFiles
+# Get the list of split archive files created with 7-Zip formats
+$archiveFiles = Get-ChildItem -Path $LocalPath -Filter '*.7z,*.zip,*.rar,*.gz,*.tar,*.bz2'
+
+# Check and process files in parallel
+$runspacePool = [runspacefactory]::CreateRunspacePool(1, $MaxParallelFiles)
+$runspacePool.Open()
+
+$runspaces = @()
+
+foreach ($file in $archiveFiles) {
+    $runspace = [powershell]::Create().AddScript({
+        if (Get-Module -ListAvailable -Name 'AWSPowerShell') {
+            CopyFileToS3_PowerShell -file $using:file
+        }
+        else {
+            CopyFileToS3_CLI -file $using:file
+        }
+    })
+
+    $runspace.RunspacePool = $runspacePool
+    $runspaces += [PSCustomObject]@{ Pipe = $runspace; Status = $runspace.BeginInvoke() }
+}
+
+# Wait for all runspaces to complete
+$runspaces | ForEach-Object {
+    $_.Pipe.EndInvoke($_.Status)
+    $_.Pipe.Dispose()
+}
+
+$runspacePool.Close()
+$runspacePool.Dispose()
+
+Write-Output "Completed copying files to S3 bucket $BucketName."
