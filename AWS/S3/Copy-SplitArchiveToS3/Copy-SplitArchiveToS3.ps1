@@ -17,6 +17,21 @@
 .PARAMETER Prefix
     Specifies an optional prefix (folder path) within the S3 bucket where the files will be copied. If provided, the script ensures that it ends with a backslash. This parameter is optional.
 
+
+.EXAMPLE
+    Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles'
+
+    This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket with the default parallelization of 5.
+
+.EXAMPLE
+    Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles' -MaxParallelFiles 10
+
+    This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket with a parallelization of 10.
+
+.EXAMPLE
+    Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles' -Prefix 'archives/'
+
+    This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket inside the 'archives/' folder.
 .NOTES
     - AWS credentials configured as environment variables are required.
     - AWS PowerShell Module or AWS CLI must be installed.
