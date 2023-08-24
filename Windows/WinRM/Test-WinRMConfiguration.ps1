@@ -12,12 +12,12 @@
     Provides detailed information about the checking process.
 
 .EXAMPLE
-    Test-WinRMConfiguration
+    Check-WinRMSettings
 
     Checks the WinRM settings and provides remediation advice if necessary.
 
 .EXAMPLE
-    Test-WinRMConfiguration -Verbose
+    Check-WinRMSettings -Verbose
 
     Performs the same check but includes verbose output detailing the checking process.
 
@@ -48,7 +48,7 @@ function Test-WinRMConfiguration {
 
     # Check listeners (HTTP and HTTPS)
     try {
-        $winRMListeners = Get-WSManInstance -ResourceURI winrm/config/listener
+        $winRMListeners = Get-WSManInstance -ResourceURI winrm/config/listener -SelectorSet @{ Address = "*"; Transport = "*" }
         $listenerInfo = $winRMListeners | ForEach-Object { $_.Transport + ' : ' + $_.Hostname }
     } catch {
         Write-Warning "An error occurred while checking the WinRM listeners: $_"
