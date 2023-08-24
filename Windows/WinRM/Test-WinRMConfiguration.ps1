@@ -9,6 +9,9 @@
 
 [CmdletBinding()]
 param (
+    # Option to include or exclude HTTPS portion check
+    [bool]$CheckHttps = $True,
+
     # The maximum length of a line in the output
     [int]$MaxLineLength = 120
 )
@@ -45,28 +48,29 @@ function Check-WinRMConfig {
 
 # Revised function to check firewall rules
 function Check-FirewallRules {
-    $portsAndProtocols = @(
-        @{ Port = 5985; Protocol = "HTTP" },
-        @{ Port = 5986; Protocol = "HTTPS" }
-    )
+    $httpRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTP-In)" }
+    $httpsRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTPS-In)" }
 
-    foreach ($item in $portsAndProtocols) {
-        $port = $item.Port
-        $protocol = $item.Protocol
-        $rule = Get-NetFirewallRule | Where-Object { $_ | Get-NetFirewallPortFilter | Where-Object { $_.LocalPort -eq $port } }
+    if ($null -eq $httpRule) {
+        Write-Warning "Firewall rule for WinRM over HTTP is not found."
+        Write-Host "Remediation: Create the required firewall rule or consult your system documentation to configure WinRM over HTTP."
+    } elseif ($httpRule.Enabled -eq 'False') {
+        Write-Warning "Firewall rule for WinRM over HTTP is disabled."
+        Write-Host "Remediation: Enable the firewall rule by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTP-In)'"
+    } else {
+        Write-Verbose "Firewall rule for WinRM over HTTP is enabled."
+    }
 
-        if ($null -eq $rule) {
-            Write-Warning "Firewall rule for WinRM over $protocol (port $port) is not found."
-            Write-Host ("Remediation: Create a firewall rule to allow traffic on port " + $port + " for WinRM over " + $protocol + ".") -ForegroundColor Yellow
-        } elseif ($rule.Enabled -eq 'False') {
-            Write-Warning "Firewall rule for WinRM over $protocol (port $port) is disabled."
-            Write-Host ("Remediation: Enable the firewall rule using the command:`nEnable-NetFirewallRule -Name " + $($rule.Name) + "") -ForegroundColor Yellow
-        } else {
-            Write-Verbose "Firewall rule for WinRM over $protocol (port $port) is found and enabled."
-        }
+    if ($null -eq $httpsRule) {
+        Write-Warning "Firewall rule for WinRM over HTTPS is not found."
+        Write-Host "Remediation: Create the required firewall rule or consult your system documentation to configure WinRM over HTTPS."
+    } elseif ($httpsRule.Enabled -eq 'False') {
+        Write-Warning "Firewall rule for WinRM over HTTPS is disabled."
+        Write-Host "Remediation: Enable the firewall rule by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTPS-In)'"
+    } else {
+        Write-Verbose "Firewall rule for WinRM over HTTPS is enabled."
     }
 }
-
 
 function Check-SSLCertificate {
     try {
