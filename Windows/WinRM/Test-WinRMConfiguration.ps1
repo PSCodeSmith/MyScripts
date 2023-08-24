@@ -1,28 +1,46 @@
 <#
 .SYNOPSIS
-    This script checks the WinRM configuration on a local Windows Server.
+    Checks the WinRM configuration on a local Windows Server.
 
 .DESCRIPTION
-    The script performs checks on the WinRM service, WinRM configuration, firewall rules, and SSL certificate if HTTPS checks are enabled.
-    It provides detailed output and suggests remediation paths for any detected issues.
+    This script validates the Windows Remote Management (WinRM) configuration, including service status, configuration settings, firewall rules, and SSL certificate if HTTPS checks are enabled.
+    It provides detailed output with color-coded results and suggests remediation paths for any detected issues.
 
 .PARAMETER CheckHttps
-    A boolean flag to include or exclude HTTPS portion checks. Defaults to true.
+    A switch that determines whether to include the HTTPS portion check.
+    If present, the script checks the SSL certificate for WinRM.
+    If absent, the script skips the HTTPS checks.
 
 .EXAMPLE
-    .\Check-WinRMConfiguration.ps1 -CheckHttps $false
+    .\Check-WinRMConfiguration.ps1
 
-    This command runs the script and skips the HTTPS checks.
+    This command runs the script with the default parameters, including the HTTPS checks.
+
+.EXAMPLE
+    .\Check-WinRMConfiguration.ps1 -CheckHttps
+
+    This command runs the script and performs the HTTPS checks.
 
 .NOTES
     Author: Micah
-    Version: 1.3
-#>
+    Version: 1.5
+    This script assumes that all required cmdlets and functions are already installed and available.
 
+.LINK
+    WinRM Documentation: https://docs.microsoft.com/en-us/windows/win32/winrm/portal
+    Get-NetFirewallRule: https://docs.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallrule
+
+.INPUTS
+    None. You cannot pipe input to this script.
+
+.OUTPUTS
+    The script writes the results of the checks to the console with color-coded messages. Passes are displayed in green, failures in red, and remediation steps in yellow.
+
+#>
 [CmdletBinding()]
 param (
     # Option to include or exclude HTTPS portion check
-    [bool]$CheckHttps = $True
+    [switch]$CheckHttps
 )
 
 # Function to check the WinRM service status
