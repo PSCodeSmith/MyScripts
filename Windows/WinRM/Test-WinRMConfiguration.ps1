@@ -43,15 +43,29 @@ function Check-WinRMConfig {
     }
 }
 
+# Revised function to check firewall rules
 function Check-FirewallRules {
-    $httpRule = Get-NetFirewallRule -DisplayName "Windows Remote Management (HTTP-In)"
-    $httpsRule = Get-NetFirewallRule -DisplayName "Windows Remote Management (HTTPS-In)"
+    $httpRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTP-In)" }
+    $httpsRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTPS-In)" }
 
-    if ($httpRule.Enabled -eq 'True' -and $httpsRule.Enabled -eq 'True') {
-        Write-Verbose "Firewall rules for WinRM are enabled."
+    if ($null -eq $httpRule) {
+        Write-Warning "Firewall rule for WinRM over HTTP is not found."
+        Write-Host "Remediation: Create the required firewall rule or consult your system documentation to configure WinRM over HTTP."
+    } elseif ($httpRule.Enabled -eq 'False') {
+        Write-Warning "Firewall rule for WinRM over HTTP is disabled."
+        Write-Host "Remediation: Enable the firewall rule by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTP-In)'"
     } else {
-        Write-Warning "Firewall rules for WinRM are not properly configured."
-        Write-Host "Remediation: Enable the firewall rules by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTP-In)'`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTPS-In)'"
+        Write-Verbose "Firewall rule for WinRM over HTTP is enabled."
+    }
+
+    if ($null -eq $httpsRule) {
+        Write-Warning "Firewall rule for WinRM over HTTPS is not found."
+        Write-Host "Remediation: Create the required firewall rule or consult your system documentation to configure WinRM over HTTPS."
+    } elseif ($httpsRule.Enabled -eq 'False') {
+        Write-Warning "Firewall rule for WinRM over HTTPS is disabled."
+        Write-Host "Remediation: Enable the firewall rule by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTPS-In)'"
+    } else {
+        Write-Verbose "Firewall rule for WinRM over HTTPS is enabled."
     }
 }
 
