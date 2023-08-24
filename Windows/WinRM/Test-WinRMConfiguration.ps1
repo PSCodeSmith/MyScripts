@@ -48,9 +48,10 @@ function Test-WinRMConfiguration {
 
     # Check listeners (HTTP and HTTPS)
     try {
-        $httpListeners = Get-WSManInstance -ResourceURI winrm/config/listener -SelectorSet @{ Address = "*"; Transport = "HTTP" } -ErrorAction SilentlyContinue
-$httpsListeners = Get-WSManInstance -ResourceURI winrm/config/listener -SelectorSet @{ Address = "*"; Transport = "HTTPS" } -ErrorAction SilentlyContinue
-$winRMListeners = @($httpListeners, $httpsListeners)
+        $winRMListeners = winrm enumerate winrm/config/Listener | Out-String
+$httpListener = if ($winRMListeners -match 'Transport = HTTP') { "HTTP" } else { "Not Found" }
+$httpsListener = if ($winRMListeners -match 'Transport = HTTPS') { "HTTPS" } else { "Not Found" }
+$listenerInfo = @($httpListener, $httpsListener) -join ', '
         $listenerInfo = $winRMListeners | ForEach-Object { $_.Transport + ' : ' + $_.Hostname }
     } catch {
         Write-Warning "An error occurred while checking the WinRM listeners: $_"
@@ -94,7 +95,6 @@ $winRMListeners = @($httpListeners, $httpsListeners)
         "Remediation"         = $remediation -join "`n"
     }
 }
-
 
 # Call the function with Verbose output
 Test-WinRMConfiguration -Verbose
