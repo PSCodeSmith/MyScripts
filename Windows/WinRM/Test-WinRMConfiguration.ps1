@@ -3,8 +3,9 @@
     Checks the WinRM configuration on a local Windows Server.
 
 .DESCRIPTION
-    This script validates the Windows Remote Management (WinRM) configuration, including service status, configuration settings, firewall rules, and SSL certificate if HTTPS checks are enabled.
-    It provides detailed output with color-coded results and suggests remediation paths for any detected issues.
+    This script validates the Windows Remote Management (WinRM) configuration, including service status, configuration settings, 
+    firewall rules, and SSL certificate if HTTPS checks are enabled.  It provides detailed output with color-coded results and 
+    suggests remediation paths for any detected issues.
 
 .PARAMETER CheckHttps
     A switch that determines whether to include the HTTPS portion check.
@@ -34,7 +35,8 @@
     None. You cannot pipe input to this script.
 
 .OUTPUTS
-    The script writes the results of the checks to the console with color-coded messages. Passes are displayed in green, failures in red, and remediation steps in yellow.
+    The script writes the results of the checks to the console with color-coded messages. Passes are displayed in green, 
+    failures in red, and remediation steps in yellow.
 
 #>
 [CmdletBinding()]
