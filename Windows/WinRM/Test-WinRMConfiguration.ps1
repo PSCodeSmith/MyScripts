@@ -16,7 +16,7 @@
 
 .NOTES
     Author: Micah
-    Version: 1.2
+    Version: 1.3
 #>
 
 [CmdletBinding()]
@@ -30,9 +30,9 @@ function Test-WinRMService {
     Write-Host "Checking WinRM service status..." -ForegroundColor Green
     $winrmService = Get-Service -Name WinRM
     if ($winrmService.Status -eq 'Running') {
-        Write-Host "WinRM service is running." -ForegroundColor Green
+        Write-Host "PASS: WinRM service is running." -ForegroundColor Green
     } else {
-        Write-Host "WinRM service is not running." -ForegroundColor Red
+        Write-Host "FAIL: WinRM service is not running." -ForegroundColor Red
         Write-Host "Remediation: Start the WinRM service using the following command:`nStart-Service -Name WinRM" -ForegroundColor Yellow
     }
 }
@@ -42,16 +42,16 @@ function Test-WinRMConfig {
     Write-Host "Checking WinRM configuration settings..." -ForegroundColor Green
     $winrmConfig = winrm get winrm/config
     if ($winrmConfig -match "AllowUnencrypted\s+=\s+false") {
-        Write-Host "Unencrypted communication is disabled." -ForegroundColor Green
+        Write-Host "PASS: Unencrypted communication is disabled." -ForegroundColor Green
     } else {
-        Write-Host "Unencrypted communication is enabled." -ForegroundColor Red
+        Write-Host "FAIL: Unencrypted communication is enabled." -ForegroundColor Red
         Write-Host "Remediation: Disable unencrypted communication by running:`nwinrm set winrm/config/service @{AllowUnencrypted=`"false`"}" -ForegroundColor Yellow
     }
 
     if ($winrmConfig -match "Basic\s+=\s+true") {
-        Write-Host "Basic authentication is enabled." -ForegroundColor Green
+        Write-Host "PASS: Basic authentication is enabled." -ForegroundColor Green
     } else {
-        Write-Host "Basic authentication is disabled." -ForegroundColor Red
+        Write-Host "FAIL: Basic authentication is disabled." -ForegroundColor Red
         Write-Host "Remediation: Enable basic authentication by running:`nwinrm set winrm/config/service @{Basic=`"true`"}" -ForegroundColor Yellow
     }
 }
@@ -63,13 +63,13 @@ function Test-FirewallRules {
     # Check HTTP rule for Domain profile
     $httpRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTP-In)" -and $_.Profile -like '*Domain*' }
     if ($null -eq $httpRule) {
-        Write-Host "Firewall rule for WinRM over HTTP is not found in the Domain profile." -ForegroundColor Red
+        Write-Host "FAIL: Firewall rule for WinRM over HTTP is not found in the Domain profile." -ForegroundColor Red
         Write-Host "Remediation: Create the required firewall rule in the Domain profile or consult your system documentation to configure WinRM over HTTP." -ForegroundColor Yellow
     } elseif ($httpRule.Enabled -eq 'False') {
-        Write-Host "Firewall rule for WinRM over HTTP is disabled in the Domain profile." -ForegroundColor Red
+        Write-Host "FAIL: Firewall rule for WinRM over HTTP is disabled in the Domain profile." -ForegroundColor Red
         Write-Host "Remediation: Enable the firewall rule in the Domain profile by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTP-In)'" -ForegroundColor Yellow
     } else {
-        Write-Host "Firewall rule for WinRM over HTTP is enabled in the Domain profile." -ForegroundColor Green
+        Write-Host "PASS: Firewall rule for WinRM over HTTP is enabled in the Domain profile." -ForegroundColor Green
     }
 
     # Check HTTPS rule for Domain profile if applicable
@@ -77,13 +77,13 @@ function Test-FirewallRules {
     {
         $httpsRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTPS-In)" -and $_.Profile -like '*Domain*' }
         if ($null -eq $httpsRule) {
-            Write-Host "Firewall rule for WinRM over HTTPS is not found in the Domain profile." -ForegroundColor Red
+            Write-Host "FAIL: Firewall rule for WinRM over HTTPS is not found in the Domain profile." -ForegroundColor Red
             Write-Host "Remediation: Create the required firewall rule in the Domain profile or consult your system documentation to configure WinRM over HTTPS." -ForegroundColor Yellow
         } elseif ($httpsRule.Enabled -eq 'False') {
-            Write-Host "Firewall rule for WinRM over HTTPS is disabled in the Domain profile." -ForegroundColor Red
+            Write-Host "FAIL: Firewall rule for WinRM over HTTPS is disabled in the Domain profile." -ForegroundColor Red
             Write-Host "Remediation: Enable the firewall rule in the Domain profile by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTPS-In)'" -ForegroundColor Yellow
         } else {
-            Write-Host "Firewall rule for WinRM over HTTPS is enabled in the Domain profile." -ForegroundColor Green
+            Write-Host "PASS: Firewall rule for WinRM over HTTPS is enabled in the Domain profile." -ForegroundColor Green
         }
     }
 }
@@ -93,9 +93,9 @@ function Test-SSLCertificate {
     Write-Host "Checking SSL certificate for WinRM..." -ForegroundColor Green
     $httpsBinding = Get-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address="*";Transport="HTTPS"}
     if ($null -ne $httpsBinding) {
-        Write-Host "HTTPS binding is configured." -ForegroundColor Green
+        Write-Host "PASS: HTTPS binding is configured." -ForegroundColor Green
     } else {
-        Write-Host "HTTPS binding is not configured." -ForegroundColor Red
+        Write-Host "FAIL: HTTPS binding is not configured." -ForegroundColor Red
         Write-Host "Remediation: Follow these steps to configure HTTPS binding:`n1. Create or import a valid SSL certificate.`n2. Bind the certificate to WinRM using the following command:`nNew-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address=`"*`"; Transport=`"HTTPS`"} -ValueSet @{CertificateThumbprint=`"Your-Certificate-Thumbprint`"}" -ForegroundColor Yellow
     }
 }
