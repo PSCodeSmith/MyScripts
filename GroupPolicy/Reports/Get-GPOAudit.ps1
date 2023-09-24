@@ -1,30 +1,29 @@
 <#
-.SYNOPSIS
-    This script performs an audit on Group Policy Objects (GPOs) in an Active Directory environment.
-
-.DESCRIPTION
-    The script retrieves information about GPOs, checks for various issues, and generates a report. It's designed to provide insights 
-	into potential misconfigurations, security risks, and inconsistencies within your GPO settings.
-
-.EXAMPLE
-    .\Get-GPOAudit.ps1
-    Runs the script without any parameters, fetching all necessary information automatically.
-
-.EXAMPLE
-    .\Get-GPOAudit.ps1
-    Runs the script for the current domain.
-
-.NOTES
-    Author: Micah
-    This script is intended for auditing purposes. Always back up your GPOs and test changes in a non-production environment first.
-
-.INPUTS
-    None. You do not have to provide any input to run this script.
-
-.OUTPUTS
-    The script generates a structured report containing potential issues and recommendations for each GPO.
+	.SYNOPSIS
+		This script performs an audit on Group Policy Objects (GPOs) in an Active Directory environment.
+	
+	.DESCRIPTION
+		The script retrieves information about GPOs, checks for various issues, and generates a report. It's designed to provide insights
+		into potential misconfigurations, security risks, and inconsistencies within your GPO settings.
+	
+	.EXAMPLE
+		.\Get-GPOAudit.ps1
+		Runs the script without any parameters, fetching all necessary information automatically.
+	
+	.EXAMPLE
+		.\Get-GPOAudit.ps1
+		Runs the script for the current domain.
+	
+	.OUTPUTS
+		The script generates a structured report containing potential issues and recommendations for each GPO.
+	
+	.NOTES
+		Author: Micah
+		This script is intended for auditing purposes. Always back up your GPOs and test changes in a non-production environment first.
+	
+	.INPUTS
+		None. You do not have to provide any input to run this script.
 #>
-
 
 # Retrieve the fully qualified domain name (FQDN) of the current domain
 $currentDomainFQDN = $([System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()).Name
@@ -37,462 +36,524 @@ $allGroupPolicyObjects = Get-GPO -All -Domain $currentDomainFQDN
 
 #region Functions
 
-function Get-OrphanedGPO {
-	<#
+function Get-OrphanedGPO
+{
+<#
 	.SYNOPSIS
 		This function retrieves orphaned GPO folders in SYSVOL.
-
+	
 	.DESCRIPTION
 		Get-OrphanedGPO identifies Group Policy Object (GPO) folders that exist in the SYSVOL share
 		but are not linked to any Active Directory objects. It compares the list of GPOs in Active Directory
 		with the GPO folders in the SYSVOL directory and identifies the ones that are orphaned.
-
+	
 	.PARAMETER allGroupPolicyObjects
 		An array of all Group Policy Objects in the domain.
-
+	
 	.PARAMETER Domain
 		The fully qualified domain name (FQDN) or NetBIOS name of the domain.
-
+	
 	.EXAMPLE
 		Get-OrphanedGPO -allGroupPolicyObjects $allGroupPolicyObjects -Domain 'mydomain.com'
-
+		
 		This will return a list of orphaned GPO folders in the domain 'mydomain.com'.
-
-	.NOTES
-		Author: Micah
-
-	.INPUTS
-		Array of all Group Policy Objects, Domain name as string.
-
+	
 	.OUTPUTS
 		PSCustomObject containing orphaned folder paths.
-	#>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory=$true)]
-        [array]$allGroupPolicyObjects,
-
-        [Parameter(Mandatory=$true)]
-        [string]$Domain
-    )
-
-    begin {
-        $ErrorActionPreference = 'Stop'
-        Write-Verbose "Initializing function Get-OrphanedGPO"
-    }
-
-    process {
-        try {
-            Write-Verbose "Fetching GPO GUIDs from the AllGPOs parameter"
-            $gpoGuids = $allGroupPolicyObjects | Select-Object -ExpandProperty Id
-
-            Write-Verbose "Constructing SYSVOL path"
-            $sysvolPath = "\\$Domain\SYSVOL\$Domain\Policies"
-
-            Write-Verbose "Fetching GUIDs from the SYSVOL directory"
-            $sysvolGuids = Get-ChildItem -Path $sysvolPath -Directory -Exclude 'PolicyDefinitions' |
-                ForEach-Object { $_.Name -replace '{|}', '' }
-
-            Write-Verbose "Comparing SYSVOL GUIDs with GPO GUIDs"
-            $orphanedFolders = Compare-Object -ReferenceObject $sysvolGuids -DifferenceObject $gpoGuids |
-                Select-Object -ExpandProperty InputObject
-
-            Write-Verbose "Creating output object for orphaned folders"
-            $orphanedFolders | ForEach-Object {
-                [PSCustomObject]@{
-                    Folder = "\\$Domain\SYSVOL\$Domain\Policies\{$_}"
-                }
-            }
-        }
-        catch {
-            Write-Error "An error occurred: $_"
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-    }
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		Array of all Group Policy Objects, Domain name as string.
+#>
+	
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[array]$allGroupPolicyObjects,
+		[Parameter(Mandatory = $true)]
+		[string]$Domain
+	)
+	
+	begin
+	{
+		$ErrorActionPreference = 'Stop'
+		Write-Verbose "Initializing function Get-OrphanedGPO"
+	}
+	
+	process
+	{
+		try
+		{
+			Write-Verbose "Fetching GPO GUIDs from the AllGPOs parameter"
+			$gpoGuids = $allGroupPolicyObjects | Select-Object -ExpandProperty Id
+			
+			Write-Verbose "Constructing SYSVOL path"
+			$sysvolPath = "\\$Domain\SYSVOL\$Domain\Policies"
+			
+			Write-Verbose "Fetching GUIDs from the SYSVOL directory"
+			$sysvolGuids = Get-ChildItem -Path $sysvolPath -Directory -Exclude 'PolicyDefinitions' |
+			ForEach-Object { $_.Name -replace '{|}', '' }
+			
+			Write-Verbose "Comparing SYSVOL GUIDs with GPO GUIDs"
+			$orphanedFolders = Compare-Object -ReferenceObject $sysvolGuids -DifferenceObject $gpoGuids |
+			Select-Object -ExpandProperty InputObject
+			
+			Write-Verbose "Creating output object for orphaned folders"
+			$orphanedFolders | ForEach-Object {
+				[PSCustomObject]@{
+					Folder = "\\$Domain\SYSVOL\$Domain\Policies\{$_}"
+				}
+			}
+		}
+		catch
+		{
+			Write-Error "An error occurred: $_"
+			$PSCmdlet.ThrowTerminatingError($_)
+		}
+	}
 }
 
-function Get-GPOUnknownSIDs {
-	<#
+function Get-GPOUnknownSIDs
+{
+<#
 	.SYNOPSIS
 		Retrieves unknown Security Identifiers (SIDs) from a given GPO object.
-
+	
 	.DESCRIPTION
 		The Get-GPOUnknownSIDs function takes a Group Policy Object (GPO) as an input parameter
 		and identifies any unknown SIDs in its security information. It returns a boolean value
 		indicating the presence of unknown SIDs.
-
+	
 	.PARAMETER GPO
 		The Group Policy Object (Microsoft.GroupPolicy.Gpo) from which to fetch security information.
-
+	
 	.EXAMPLE
 		Get-GPOUnknownSIDs -GPO $someGPOObject
-
+		
 		Checks for unknown SIDs in the given GPO object and returns a boolean value.
-
-	.NOTES
-		Author: Micah
-
-	.INPUTS
-		Microsoft.GroupPolicy.Gpo object.
-
+	
 	.OUTPUTS
 		Boolean value indicating the presence of unknown SIDs.
-	#>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.GroupPolicy.Gpo]$GPO
-    )
-
-    begin {
-        $ErrorActionPreference = 'Stop'
-        Write-Verbose "Initializing function Get-GPOUnknownSIDs"
-    }
-
-    process {
-        try {
-            Write-Verbose "Fetching unknown SIDs from the given GPO object"
-            $unknownSIDs = $GPO.GetSecurityInfo().Trustee | Where-Object { $_.SidType -eq 'Unknown' }
-
-            Write-Verbose "Checking if any unknown SIDs are found"
-            $unknownSIDFound = $null -ne $unknownSIDs
-            $unknownSIDFound
-        }
-        catch {
-            Write-Error "An error occurred: $_"
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-    }
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		Microsoft.GroupPolicy.Gpo object.
+#>
+	
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[Microsoft.GroupPolicy.Gpo]$GPO
+	)
+	
+	begin
+	{
+		$ErrorActionPreference = 'Stop'
+		Write-Verbose "Initializing function Get-GPOUnknownSIDs"
+	}
+	
+	process
+	{
+		try
+		{
+			Write-Verbose "Fetching unknown SIDs from the given GPO object"
+			$unknownSIDs = $GPO.GetSecurityInfo().Trustee | Where-Object { $_.SidType -eq 'Unknown' }
+			
+			Write-Verbose "Checking if any unknown SIDs are found"
+			$unknownSIDFound = $null -ne $unknownSIDs
+			$unknownSIDFound
+		}
+		catch
+		{
+			Write-Error "An error occurred: $_"
+			$PSCmdlet.ThrowTerminatingError($_)
+		}
+	}
 }
 
-function Get-GPOPermissionToUser {
-	<#
+function Get-GPOPermissionToUser
+{
+<#
 	.SYNOPSIS
 		Retrieves information about GPO permissions assigned to user accounts.
-
+	
 	.DESCRIPTION
 		The Get-GPOPermissionToUser function takes a Group Policy Object (GPO) as an input parameter.
 		It checks if any user accounts have been granted 'GpoEditDeleteModifySecurity' permissions on the GPO
 		and returns a boolean value indicating the presence of such permissions.
-
+	
 	.PARAMETER GPO
 		The Group Policy Object (Microsoft.GroupPolicy.Gpo) from which to fetch permission information.
-
+	
 	.EXAMPLE
 		Get-GPOPermissionToUser -GPO $someGPOObject
-
+		
 		Checks for user accounts with 'GpoEditDeleteModifySecurity' permissions on the given GPO object
 		and returns a boolean value.
-
-	.NOTES
-		Author: Micah
-
-	.INPUTS
-		Microsoft.GroupPolicy.Gpo object.
-
+	
 	.OUTPUTS
 		Boolean value indicating the presence of user accounts with specified permissions.
-	#>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.GroupPolicy.Gpo]$GPO
-    )
-
-    begin {
-        $ErrorActionPreference = 'Stop'
-        Write-Verbose "Initializing function Get-GPOPermissionToUser"
-    }
-
-    process {
-        try {
-            Write-Verbose "Fetching permissions granted to user accounts on the given GPO object"
-            $PermissionToUser = Get-GPPermission -Guid $GPO.Id -All |
-                Where-Object { $_.Permission -eq 'GpoEditDeleteModifySecurity' -and $_.Trustee.SidType -eq 'User' }
-
-            Write-Verbose "Checking if any user accounts have the specified permissions"
-            $PermissionToUserFound = $null -ne $PermissionToUser
-            $PermissionToUserFound
-        }
-        catch {
-            Write-Error "An error occurred: $_"
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-    }
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		Microsoft.GroupPolicy.Gpo object.
+#>
+	
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[Microsoft.GroupPolicy.Gpo]$GPO
+	)
+	
+	begin
+	{
+		$ErrorActionPreference = 'Stop'
+		Write-Verbose "Initializing function Get-GPOPermissionToUser"
+	}
+	
+	process
+	{
+		try
+		{
+			Write-Verbose "Fetching permissions granted to user accounts on the given GPO object"
+			$PermissionToUser = Get-GPPermission -Guid $GPO.Id -All |
+			Where-Object { $_.Permission -eq 'GpoEditDeleteModifySecurity' -and $_.Trustee.SidType -eq 'User' }
+			
+			Write-Verbose "Checking if any user accounts have the specified permissions"
+			$PermissionToUserFound = $null -ne $PermissionToUser
+			$PermissionToUserFound
+		}
+		catch
+		{
+			Write-Error "An error occurred: $_"
+			$PSCmdlet.ThrowTerminatingError($_)
+		}
+	}
 }
 
-function Get-GPOMissingPermissions {
-	<#
+function Get-GPOMissingPermissions
+{
+<#
 	.SYNOPSIS
 		Checks for missing permissions for specified user groups on a GPO.
-
+	
 	.DESCRIPTION
 		The Get-GPOMissingPermissions function takes a Group Policy Object (GPO) as input and evaluates
 		if the 'Authenticated Users' or 'Domain Computers' groups have the required 'GPOApply' or 'GPORead' permissions.
 		It returns a boolean value indicating whether such permissions are missing.
-
+	
 	.PARAMETER GPO
 		The Group Policy Object (Microsoft.GroupPolicy.Gpo) to check.
-
+	
 	.EXAMPLE
 		Get-GPOMissingPermissions -GPO $someGPOObject
-
+		
 		Returns a boolean indicating if the required permissions are missing on the specified GPO.
-
-	.NOTES
-		Author: Micah
-
-	.INPUTS
-		Microsoft.GroupPolicy.Gpo object.
-
+	
 	.OUTPUTS
 		Boolean value indicating the presence or absence of required permissions.
-	#>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.GroupPolicy.Gpo]$GPO
-    )
-
-    begin {
-        $ErrorActionPreference = 'Stop'
-        Write-Verbose "Initializing function Get-GPOMissingPermissions"
-    }
-
-    process {
-        try {
-            Write-Verbose "Fetching all permissions on the given GPO object"
-            $Permissions = Get-GPPermission -Guid $GPO.Id -All
-
-            Write-Verbose "Checking for 'Authenticated Users' and 'Domain Computers' permissions"
-            $GPOPermissionForAuthUsers = $Permissions | Where-Object { $_.Trustee.Sid.Value -eq 'S-1-5-11' }
-
-            # Assuming $DomainComputersSID is defined elsewhere in the script
-            $GPOPermissionForDomainComputers = $Permissions | Where-Object { $_.Trustee.Sid.Value -eq $DomainComputersSID }
-
-            $MissingPermissions = $true
-
-            Write-Verbose "Evaluating permissions"
-            if (($GPOPermissionForAuthUsers) -or ($GPOPermissionForDomainComputers)) {
-                if (("GPOApply", "GPORead" -contains $GPOPermissionForAuthUsers.Permission) -and ($false -eq $GPOPermissionForAuthUsers.Denied)) {
-                    $MissingPermissions = $false
-                }
-                elseif ($GPOPermissionForDomainComputers) {
-                    if (("GPOApply", "GPORead" -contains $GPOPermissionForDomainComputers.Permission) -and ($false -eq $GPOPermissionForDomainComputers.Denied)) {
-                        $MissingPermissions = $false
-                    }
-                }
-            }
-            $MissingPermissions
-        }
-        catch {
-            Write-Error "An error occurred: $_"
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-    }
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		Microsoft.GroupPolicy.Gpo object.
+#>
+	
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[Microsoft.GroupPolicy.Gpo]$GPO
+	)
+	
+	begin
+	{
+		$ErrorActionPreference = 'Stop'
+		Write-Verbose "Initializing function Get-GPOMissingPermissions"
+	}
+	
+	process
+	{
+		try
+		{
+			Write-Verbose "Fetching all permissions on the given GPO object"
+			$Permissions = Get-GPPermission -Guid $GPO.Id -All
+			
+			Write-Verbose "Checking for 'Authenticated Users' and 'Domain Computers' permissions"
+			$GPOPermissionForAuthUsers = $Permissions | Where-Object { $_.Trustee.Sid.Value -eq 'S-1-5-11' }
+			
+			# Assuming $DomainComputersSID is defined elsewhere in the script
+			$GPOPermissionForDomainComputers = $Permissions | Where-Object { $_.Trustee.Sid.Value -eq $DomainComputersSID }
+			
+			$MissingPermissions = $true
+			
+			Write-Verbose "Evaluating permissions"
+			if (($GPOPermissionForAuthUsers) -or ($GPOPermissionForDomainComputers))
+			{
+				if (("GPOApply", "GPORead" -contains $GPOPermissionForAuthUsers.Permission) -and ($false -eq $GPOPermissionForAuthUsers.Denied))
+				{
+					$MissingPermissions = $false
+				}
+				elseif ($GPOPermissionForDomainComputers)
+				{
+					if (("GPOApply", "GPORead" -contains $GPOPermissionForDomainComputers.Permission) -and ($false -eq $GPOPermissionForDomainComputers.Denied))
+					{
+						$MissingPermissions = $false
+					}
+				}
+			}
+			$MissingPermissions
+		}
+		catch
+		{
+			Write-Error "An error occurred: $_"
+			$PSCmdlet.ThrowTerminatingError($_)
+		}
+	}
 }
 
-function Get-GPOEmptySecurityFiltering {
-	<#
+function Get-GPOEmptySecurityFiltering
+{
+<#
 	.SYNOPSIS
 		Checks if a GPO object has empty security filtering.
-
+	
 	.DESCRIPTION
 		The Get-GPOEmptySecurityFiltering function takes a Group Policy Object (GPO) as an input and evaluates
 		if the object has security filtering set for 'GPOApply'. It returns a boolean value indicating the status
 		of security filtering.
-
+	
 	.PARAMETER GPO
 		The Group Policy Object (Microsoft.GroupPolicy.Gpo) to check.
-
+	
 	.EXAMPLE
 		Get-GPOEmptySecurityFiltering -GPO $someGPOObject
-
+		
 		Returns a boolean indicating if the GPO object has empty security filtering.
-
-	.NOTES
-		Author: Micah
-
-	.INPUTS
-		Microsoft.GroupPolicy.Gpo object.
-
+	
 	.OUTPUTS
 		Boolean value indicating the presence or absence of 'GPOApply' security filtering.
-	#>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.GroupPolicy.Gpo]$GPO
-    )
-
-    begin {
-        $ErrorActionPreference = 'Stop'
-        Write-Verbose "Initializing function Get-GPOEmptySecurityFiltering"
-    }
-
-    process {
-        try {
-            Write-Verbose "Fetching all permissions on the given GPO object"
-            $Permissions = Get-GPPermission -Guid $GPO.Id -All
-
-            $SecurityFiltering = $false
-
-            Write-Verbose "Evaluating security filtering for 'GPOApply'"
-            foreach ($Permission in $Permissions) {
-                if ("GPOApply" -eq $Permission.Permission) {
-                    $SecurityFiltering = $true
-                    break
-                }
-            }
-            $SecurityFiltering
-        }
-        catch {
-            Write-Error "An error occurred: $_"
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-    }
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		Microsoft.GroupPolicy.Gpo object.
+#>
+	
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[Microsoft.GroupPolicy.Gpo]$GPO
+	)
+	
+	begin
+	{
+		$ErrorActionPreference = 'Stop'
+		Write-Verbose "Initializing function Get-GPOEmptySecurityFiltering"
+	}
+	
+	process
+	{
+		try
+		{
+			Write-Verbose "Fetching all permissions on the given GPO object"
+			$Permissions = Get-GPPermission -Guid $GPO.Id -All
+			
+			$SecurityFiltering = $false
+			
+			Write-Verbose "Evaluating security filtering for 'GPOApply'"
+			foreach ($Permission in $Permissions)
+			{
+				if ("GPOApply" -eq $Permission.Permission)
+				{
+					$SecurityFiltering = $true
+					break
+				}
+			}
+			$SecurityFiltering
+		}
+		catch
+		{
+			Write-Error "An error occurred: $_"
+			$PSCmdlet.ThrowTerminatingError($_)
+		}
+	}
 }
 
-function Get-GPOVersionConsistency {
-	<#
+function Get-GPOVersionConsistency
+{
+<#
 	.SYNOPSIS
 		Checks the version consistency between AD and SYSVOL for a given GPO section.
-
+	
 	.DESCRIPTION
 		The Get-GPOVersionConsistency function takes a Group Policy Object (GPO) and a section ('Computer' or 'User') as inputs.
 		It compares the DSVersion and SysvolVersion for the specified section and returns an object indicating the consistency status.
-
+	
 	.PARAMETER GPO
 		The Group Policy Object (Microsoft.GroupPolicy.Gpo) to check.
-
+	
 	.PARAMETER Section
 		The section ('Computer' or 'User') for which to check version consistency.
-
+	
 	.EXAMPLE
 		Get-GPOVersionConsistency -GPO $someGPOObject -Section 'Computer'
-
+		
 		Returns an object with fields for AD version, SYSVOL version, and a boolean indicating if they are inconsistent.
-
-	.NOTES
-		Author: Micah
-
-	.INPUTS
-		Microsoft.GroupPolicy.Gpo object, Section as string ('Computer' or 'User').
-
+	
 	.OUTPUTS
 		PSCustomObject containing AD_Version, SYSVOL_Version, and Inconsistent status.
-	#>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.GroupPolicy.Gpo]$GPO,
-        
-        [Parameter(Mandatory = $true)]
-        [ValidateSet('Computer', 'User')]
-        [string]$Section
-    )
-
-    begin {
-        $ErrorActionPreference = 'Stop'
-        Write-Verbose "Initializing function Get-GPOVersionConsistency"
-    }
-
-    process {
-        try {
-            Write-Verbose "Determining DS and SYSVOL versions for the $Section section"
-
-            # Initialize versions based on the Section parameter
-            $DSVersion = $GPO.$Section.DSVersion
-            $SYSVOLVersion = $GPO.$Section.SysvolVersion
-
-            Write-Verbose "Comparing DSVersion and SYSVOLVersion"
-            $CompareResult = [boolean]$(Compare-Object -ReferenceObject $DSVersion -DifferenceObject $SYSVOLVersion | Select-Object -ExpandProperty InputObject)
-
-            Write-Verbose "Creating output object"
-            [PSCustomObject]@{
-                AD_Version      = $DSVersion
-                SYSVOL_Version  = $SYSVOLVersion
-                Inconsistent    = $CompareResult
-            }
-        }
-        catch {
-            Write-Error "An error occurred: $_"
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-    }
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		Microsoft.GroupPolicy.Gpo object, Section as string ('Computer' or 'User').
+#>
+	
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[Microsoft.GroupPolicy.Gpo]$GPO,
+		[Parameter(Mandatory = $true)]
+		[ValidateSet('Computer', 'User')]
+		[string]$Section
+	)
+	
+	begin
+	{
+		$ErrorActionPreference = 'Stop'
+		Write-Verbose "Initializing function Get-GPOVersionConsistency"
+	}
+	
+	process
+	{
+		try
+		{
+			Write-Verbose "Determining DS and SYSVOL versions for the $Section section"
+			
+			# Initialize versions based on the Section parameter
+			$DSVersion = $GPO.$Section.DSVersion
+			$SYSVOLVersion = $GPO.$Section.SysvolVersion
+			
+			Write-Verbose "Comparing DSVersion and SYSVOLVersion"
+			$CompareResult = [boolean]$(Compare-Object -ReferenceObject $DSVersion -DifferenceObject $SYSVOLVersion | Select-Object -ExpandProperty InputObject)
+			
+			Write-Verbose "Creating output object"
+			[PSCustomObject]@{
+				AD_Version	   = $DSVersion
+				SYSVOL_Version = $SYSVOLVersion
+				Inconsistent   = $CompareResult
+			}
+		}
+		catch
+		{
+			Write-Error "An error occurred: $_"
+			$PSCmdlet.ThrowTerminatingError($_)
+		}
+	}
 }
 
-function Get-GPOOwner {
-	<#
+function Get-GPOOwner
+{
+<#
 	.SYNOPSIS
 		Determines whether the owner of a given GPO is a user account.
-
+	
 	.DESCRIPTION
 		The Get-GPOOwner function takes a Group Policy Object (GPO) and the current domain's NetBIOS name as inputs.
 		It checks if the owner of the GPO is a user account and returns a boolean value indicating the same.
-
+	
 	.PARAMETER GPO
 		The Group Policy Object (Microsoft.GroupPolicy.Gpo) to check.
-
+	
 	.PARAMETER currentDomainNetBIOS
 		The NetBIOS name of the current domain.
-
+	
 	.EXAMPLE
 		Get-GPOOwner -GPO $someGPOObject -currentDomainNetBIOS 'MYDOMAIN'
-
+		
 		Returns a boolean value indicating if the owner of the GPO is a user account.
-
-	.NOTES
-		Author: Micah
-
-	.INPUTS
-		Microsoft.GroupPolicy.Gpo object, currentDomainNetBIOS as string.
-
+	
 	.OUTPUTS
 		Boolean value indicating whether the owner is a user account.
-	#>
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true)]
-        [Microsoft.GroupPolicy.Gpo]$GPO,
-
-        [Parameter(Mandatory = $true)]
-        [String]$currentDomainNetBIOS
-    )
-
-    begin {
-        $ErrorActionPreference = 'Stop'
-        Write-Verbose "Initializing function Get-GPOOwner"
-    }
-
-    process {
-        try {
-            Write-Verbose "Extracting the owner name from the GPO object"
-            $OwnerName = $($GPO.Owner -replace "$currentDomainNetBIOS\\", '')
-
-            Write-Verbose "Fetching the corresponding AD object for the owner"
-            $OwnerADObject = Get-ADObject -Filter { sAMAccountName -eq $OwnerName }
-
-            Write-Verbose "Determining if the owner is a user account"
-            $OwnerIsUser = $false
-            if ($OwnerADObject.ObjectClass -eq 'User') {
-                $OwnerIsUser = $true
-            }
-            $OwnerIsUser
-        }
-        catch {
-            Write-Error "An error occurred: $_"
-            $PSCmdlet.ThrowTerminatingError($_)
-        }
-    }
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		Microsoft.GroupPolicy.Gpo object, currentDomainNetBIOS as string.
+#>
+	
+	[CmdletBinding()]
+	param
+	(
+		[Parameter(Mandatory = $true)]
+		[Microsoft.GroupPolicy.Gpo]$GPO,
+		[Parameter(Mandatory = $true)]
+		[String]$currentDomainNetBIOS
+	)
+	
+	begin
+	{
+		$ErrorActionPreference = 'Stop'
+		Write-Verbose "Initializing function Get-GPOOwner"
+	}
+	
+	process
+	{
+		try
+		{
+			Write-Verbose "Extracting the owner name from the GPO object"
+			$OwnerName = $($GPO.Owner -replace "$currentDomainNetBIOS\\", '')
+			
+			Write-Verbose "Fetching the corresponding AD object for the owner"
+			$OwnerADObject = Get-ADObject -Filter { sAMAccountName -eq $OwnerName }
+			
+			Write-Verbose "Determining if the owner is a user account"
+			$OwnerIsUser = $false
+			if ($OwnerADObject.ObjectClass -eq 'User')
+			{
+				$OwnerIsUser = $true
+			}
+			$OwnerIsUser
+		}
+		catch
+		{
+			Write-Error "An error occurred: $_"
+			$PSCmdlet.ThrowTerminatingError($_)
+		}
+	}
 }
 
 # Function to add items to the report with a standardized structure
-function Add-ToReport ($data, $urgency, $problem, $recommendation) {
+function Add-ToReport
+{
+	param
+	(
+		$data,
+		$urgency,
+		$problem,
+		$recommendation
+	)
+	
 	$report += $data | Select-Object @{ N = 'Urgency'; E = { $urgency } },
-									@{ N = 'Problem'; E = { $problem } },
-									'GPO_Name',
-									@{ N = 'Recommendation'; E = { $recommendation } }
+									 @{ N = 'Problem'; E = { $problem } },
+									 'GPO_Name',
+									 @{ N = 'Recommendation'; E = { $recommendation } }
 }
 
 #endregion Functions

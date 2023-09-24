@@ -1,19 +1,25 @@
 <#
-.SYNOPSIS
-    Retrieves information about disabled Group Policy Objects (GPOs).
-.DESCRIPTION
-    This script fetches all GPOs, filters out the disabled ones, and returns their names along with the specific disabled settings.
-.PARAMETER None
-    This script takes no parameters.
-.EXAMPLE
-    PS> .\Get-DisabledGpoInfo.ps1
-    This will execute the script and return disabled GPOs with their respective categories.
-.NOTES
-    Author: Micah
-.INPUTS
-    None
-.OUTPUTS
-    An array of PSCustomObjects containing the names of disabled GPOs and their disabled setting categories.
+	.SYNOPSIS
+		Retrieves information about disabled Group Policy Objects (GPOs).
+	
+	.DESCRIPTION
+		This script fetches all GPOs, filters out the disabled ones, and returns their names along with the specific disabled settings.
+	
+	.EXAMPLE
+		PS> .\Get-DisabledGpoInfo.ps1
+		This will execute the script and return disabled GPOs with their respective categories.
+	
+	.OUTPUTS
+		An array of PSCustomObjects containing the names of disabled GPOs and their disabled setting categories.
+	
+	.NOTES
+		Author: Micah
+	
+	.PARAMETER None
+		This script takes no parameters.
+	
+	.INPUTS
+		None
 #>
 [CmdletBinding()]
 [OutputType([PSCustomObject])]

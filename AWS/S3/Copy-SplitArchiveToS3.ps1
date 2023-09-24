@@ -1,53 +1,51 @@
 <#
-.SYNOPSIS
-    Copies split archive files created with 7-Zip to an S3 bucket in parallel.
-
-.DESCRIPTION
-    The Copy-SplitArchiveToS3 script copies split archive files created with 7-Zip to an Amazon S3 bucket in parallel. It supports various archive formats and can utilize either the AWS PowerShell Module or AWS CLI.
-
-.PARAMETER BucketName
-    Specifies the name of the S3 bucket where the files will be copied. This parameter is mandatory.
-
-.PARAMETER LocalPath
-    Specifies the local directory path where the split archive files created with 7-Zip are located. This parameter is mandatory.
-
-.PARAMETER MaxParallelFiles
-    Specifies the maximum number of files to be transferred in parallel. The default value is 5.
-
-.PARAMETER Prefix
-    Specifies an optional prefix (folder path) within the S3 bucket where the files will be copied. If provided, the script ensures that it ends with a backslash. This parameter is optional.
-
-
-.EXAMPLE
-    Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles'
-
-    This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket with the default parallelization of 5.
-
-.EXAMPLE
-    Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles' -MaxParallelFiles 10
-
-    This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket with a parallelization of 10.
-
-.EXAMPLE
-    Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles' -Prefix 'archives/'
-
-    This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket inside the 'archives/' folder.
-.NOTES
-    - AWS credentials configured as environment variables are required.
-    - AWS PowerShell Module or AWS CLI must be installed.
-    - Supported 7-Zip formats include 7z, zip, rar, gz, tar, and bz2.
+	.SYNOPSIS
+		Copies split archive files created with 7-Zip to an S3 bucket in parallel.
+	
+	.DESCRIPTION
+		The Copy-SplitArchiveToS3 script copies split archive files created with 7-Zip to an Amazon S3 bucket in parallel. It supports various archive formats and can utilize either the AWS PowerShell Module or AWS CLI.
+	
+	.PARAMETER BucketName
+		Specifies the name of the S3 bucket where the files will be copied. This parameter is mandatory.
+	
+	.PARAMETER LocalPath
+		Specifies the local directory path where the split archive files created with 7-Zip are located. This parameter is mandatory.
+	
+	.PARAMETER MaxParallelFiles
+		Specifies the maximum number of files to be transferred in parallel. The default value is 5.
+	
+	.PARAMETER Prefix
+		Specifies an optional prefix (folder path) within the S3 bucket where the files will be copied. If provided, the script ensures that it ends with a backslash. This parameter is optional.
+	
+	.EXAMPLE
+		Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles'
+		
+		This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket with the default parallelization of 5.
+	
+	.EXAMPLE
+		Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles' -MaxParallelFiles 10
+		
+		This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket with a parallelization of 10.
+	
+	.EXAMPLE
+		Copy-SplitArchiveToS3 -BucketName 'my-bucket' -LocalPath 'C:\ArchiveFiles' -Prefix 'archives/'
+		
+		This example demonstrates how to copy split archive files located in 'C:\ArchiveFiles' to the 'my-bucket' S3 bucket inside the 'archives/' folder.
+	
+	.NOTES
+		- AWS credentials configured as environment variables are required.
+		- AWS PowerShell Module or AWS CLI must be installed.
+		- Supported 7-Zip formats include 7z, zip, rar, gz, tar, and bz2.
 #>
 [CmdletBinding()]
-param (
-    [Parameter(Mandatory=$true)]
-    [string]$BucketName,
-
-    [Parameter(Mandatory=$true)]
-    [string]$LocalPath,
-
-    [int]$MaxParallelFiles = 5,
-
-    [string]$Prefix = ""
+param
+(
+	[Parameter(Mandatory = $true)]
+	[string]$BucketName,
+	[Parameter(Mandatory = $true)]
+	[string]$LocalPath,
+	[int]$MaxParallelFiles = 5,
+	[string]$Prefix = ""
 )
 
 # Ensure that Prefix ends with a backslash

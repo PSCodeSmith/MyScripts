@@ -1,29 +1,30 @@
 <#
-.SYNOPSIS
-This script gathers session-related events for specified computers.
-
-.DESCRIPTION
-The script retrieves session start and stop events from the event logs of specified computers.
-It then calculates the active session duration for each found session.
-
-.PARAMETER ComputerName
-The names of the computers to be processed. Defaults to the local computer.
-
-.EXAMPLE
-.\Get-SessionEvents.ps1 -ComputerName "Server1","Server2"
-
-.NOTES
-Author: Micah
-
-.INPUTS
-ComputerName: The names of the computers to be processed.
-
-.OUTPUTS
-Custom PowerShell objects containing session event details.
+	.SYNOPSIS
+		This script gathers session-related events for specified computers.
+	
+	.DESCRIPTION
+		The script retrieves session start and stop events from the event logs of specified computers.
+		It then calculates the active session duration for each found session.
+	
+	.PARAMETER ComputerName
+		The names of the computers to be processed. Defaults to the local computer.
+	
+	.EXAMPLE
+		.\Get-SessionEvents.ps1 -ComputerName "Server1","Server2"
+	
+	.OUTPUTS
+		Custom PowerShell objects containing session event details.
+	
+	.NOTES
+		Author: Micah
+	
+	.INPUTS
+		ComputerName: The names of the computers to be processed.
 #>
 [CmdletBinding()]
-param (
-    [string[]]$ComputerName = $Env:COMPUTERNAME
+param
+(
+	[string[]]$ComputerName = $Env:COMPUTERNAME
 )
 
 # Define session events

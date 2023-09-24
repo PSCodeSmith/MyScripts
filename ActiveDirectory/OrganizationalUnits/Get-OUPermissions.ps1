@@ -1,27 +1,27 @@
 <#
-.SYNOPSIS
-Generates a report of Active Directory permissions for Organizational Units (OUs).
-
-.DESCRIPTION
-Fetches the ACL entries for each OU and exports them to a CSV file.
-
-.PARAMETER None
-
-.EXAMPLE
-.\Get-OUPermissions.ps1
-
-.NOTES
-Author: Micah
-
-.INPUTS
-None
-
-.OUTPUTS
-CSV file with OU permissions.
+	.SYNOPSIS
+		Generates a report of Active Directory permissions for Organizational Units (OUs).
+	
+	.DESCRIPTION
+		Fetches the ACL entries for each OU and exports them to a CSV file.
+	
+	.EXAMPLE
+		.\Get-OUPermissions.ps1
+	
+	.OUTPUTS
+		CSV file with OU permissions.
+	
+	.NOTES
+		Author: Micah
+	
+	.PARAMETER None
+		
+	
+	.INPUTS
+		None
 #>
-
 [CmdletBinding()]
-param()
+param ()
 
 # Import the ActiveDirectory module if not already loaded
 if (-not (Get-Module -Name 'ActiveDirectory')) {

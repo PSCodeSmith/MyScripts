@@ -1,19 +1,25 @@
 <#
-.SYNOPSIS
-    This script retrieves the status information of all Group Policy Objects (GPOs).
-.DESCRIPTION
-    The script collects all GPOs and determines their status as 'Disabled', 'Unlinked', or skips them.
-.PARAMETER None
-    This script takes no parameters.
-.EXAMPLE
-    PS> .\Get-GpoStatusInfo.ps1
-    This will execute the script and display the GPOs with their status.
-.NOTES
-    Author: Micah
-.INPUTS
-    None
-.OUTPUTS
-    An array of PSCustomObjects containing GPO names and their statuses.
+	.SYNOPSIS
+		This script retrieves the status information of all Group Policy Objects (GPOs).
+	
+	.DESCRIPTION
+		The script collects all GPOs and determines their status as 'Disabled', 'Unlinked', or skips them.
+	
+	.EXAMPLE
+		PS> .\Get-GpoStatusInfo.ps1
+		This will execute the script and display the GPOs with their status.
+	
+	.OUTPUTS
+		An array of PSCustomObjects containing GPO names and their statuses.
+	
+	.NOTES
+		Author: Micah
+	
+	.PARAMETER None
+		This script takes no parameters.
+	
+	.INPUTS
+		None
 #>
 
 $AllGPOs = Get-Gpo -All
