@@ -194,10 +194,7 @@ function Clean-String {
     $str = $str -replace '(\d{4})/(\d{2})/(\d{2})', '$1-$2-$3'
 
     # Remove underscores that could cause unintended formatting
-    $str = $str -replace '\s_(\w)', ' $1' `  # Remove underscore after space before a word
-                -replace '(\w)_\s', '$1 ' `  # Remove underscore before space after a word
-                -replace '(\w)_(\W)', '$1$2' ` # Remove underscore between a word and a non-word character
-                -replace '(\W)_(\w)', '$1$2'   # Remove underscore between a non-word character and a word
+    $str = $str -replace '\s_(\w)', ' $1' -replace '(\w)_\s', '$1 ' -replace '(\w)_(\W)', '$1$2' -replace '(\W)_(\w)', '$1$2'
 
     # Then perform other replacements
     $str = $str -replace '\*', '' `
