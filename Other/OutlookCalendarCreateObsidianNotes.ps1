@@ -174,22 +174,53 @@ $($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
 function Clean-String {
     <#
     .SYNOPSIS
-    Cleans a string by replacing or removing specific characters.
+    Cleans a string for use as an Obsidian note name, removing or replacing all illegal characters and preventing unintended formatting.
 
     .DESCRIPTION
-    This function takes a string input and replaces or removes characters that might cause issues in file names or markdown syntax.
+    This function takes a string input and removes or replaces all characters that are illegal in Obsidian note names (* " \ / < > : | ?). 
+    It preserves common date formats, replaces some common abbreviations with more readable alternatives, and prevents unintended formatting in Obsidian data views by removing underscores in specific positions.
 
     .PARAMETER str
     The input string to be cleaned.
 
     .EXAMPLE
-    Clean-String "Meeting: [Team] Project Update 2023/07/28"
-    Returns: "Meeting - (Team) Project Update 2023&07&28"
+    Clean-String "Meeting: [Team] * _Project Update_ * 2023/07/28 | Status w/ Management?"
+    Returns: "Meeting - (Team) Project Update 2023-07-28 - Status with Management"
     #>
     [CmdletBinding()]
     param([string]$str)
 
-    $str -replace '\[', '(' -replace '\]', ')' -replace '//', '&' -replace ':', ' -' -replace '[/\\]', '&' -replace '[\"*:<>?]', '' -replace '[^\w\-_\. ()&]', '_'
+    # First, protect date formats
+    $str = $str -replace '(\d{4})/(\d{2})/(\d{2})', '$1-$2-$3'
+
+    # Remove underscores that could cause unintended formatting
+    $str = $str -replace '\s_(\w)', ' $1' `  # Remove underscore after space before a word
+                -replace '(\w)_\s', '$1 ' `  # Remove underscore before space after a word
+                -replace '(\w)_(\W)', '$1$2' ` # Remove underscore between a word and a non-word character
+                -replace '(\W)_(\w)', '$1$2'   # Remove underscore between a non-word character and a word
+
+    # Then perform other replacements
+    $str = $str -replace '\*', '' `
+                -replace '"', "'" `
+                -replace '\\', '-' `
+                -replace '/', '-' `
+                -replace '<', '(' `
+                -replace '>', ')' `
+                -replace ':', ' -' `
+                -replace '\|', '-' `
+                -replace '\?', '' `
+                -replace '\[', '(' `
+                -replace '\]', ')' `
+                -replace '\bw/', 'with'
+
+    # Trim any leading or trailing spaces and dashes
+    $str = $str.Trim(' -')
+
+    # Replace any multiple spaces or dashes with a single instance
+    $str = $str -replace '\s+', ' ' `
+                -replace '-+', '-'
+
+    return $str
 }
 
 function Truncate-MeetingBody {
