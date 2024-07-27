@@ -118,24 +118,35 @@ tags:
 - meetings
 ---
 
+> [!info]- Meeting Organizer
+> $($meeting.Organizer)
+
+> [!info]- Required Attendees
+> $($meeting.RequiredAttendees -join ", ")
+
+> [!info]- Optional Attendees
+> $($meeting.OptionalAttendees -join ", ")
+
+> [!info]- Location
+> $($meeting.Location)
+
+> [!info]- Meeting Agenda (from Outlook)
+$($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
+
 ## ⭐Agenda/Questions
 
-> [!info]+ Meeting Details
-**Organizer:** $($meeting.Organizer)
-**Required Attendees:** $($meeting.RequiredAttendees -join ", ")
-**Optional Attendees:** $($meeting.OptionalAttendees -join ", ")
-**Location:** $($meeting.Location)
-> 
-$($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
+- 
 
 ---
 
 ## 📝 Notes
 
+- 
+
 ---
 ## ✅ Action Items
 
-- [ ]
+- [ ] 
 
 "@
                 # Create folder structure
