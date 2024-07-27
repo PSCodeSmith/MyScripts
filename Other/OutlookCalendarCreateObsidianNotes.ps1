@@ -1,49 +1,108 @@
 function Get-OutlookCalendar {
+    <#
+    .SYNOPSIS
+    Exports Outlook calendar events to Obsidian markdown files.
+
+    .DESCRIPTION
+    This function retrieves calendar events from Microsoft Outlook and creates corresponding markdown files in a specified Obsidian folder structure. It supports filtering by date range and Outlook category.
+
+    .PARAMETER OUTLOOK_CALENDAR_FOLDER
+    The Outlook folder constant for the calendar. Default is 9 (olFolderCalendar).
+
+    .PARAMETER OBSIDIAN_FOLDER
+    The root folder where Obsidian markdown files will be created.
+
+    .PARAMETER DaysBack
+    Number of days in the past to retrieve events for. Default is -30.
+
+    .PARAMETER DaysForward
+    Number of days in the future to retrieve events for. Default is 0.
+
+    .PARAMETER OutlookCategory
+    The Outlook category to filter events by. If empty, all events are included.
+
+    .PARAMETER DefaultAttendees
+    An array of default attendees to add to each meeting note.
+
+    .EXAMPLE
+    Get-OutlookCalendar -OBSIDIAN_FOLDER "C:\ObsidianVault" -DaysBack -7 -DaysForward 7 -OutlookCategory "Work"
+
+    .NOTES
+    Requires Microsoft Outlook to be installed and running.
+    #>
     [CmdletBinding()]
     param (
-        [Parameter()]
+        [Parameter(Mandatory=$false)]
         [int] $OUTLOOK_CALENDAR_FOLDER = 9,
-        [Parameter()]
-        [string] $OBSIDIAN_FOLDER = "",
-        [Parameter()]
-        [int] $daysBack = -30,
-        [Parameter()]
-        [int] $daysForward = 0,
-        [Parameter()]
-        [string] $outlookCategory = "",
-        [Parameter()]
-        [string[]] $defaultAttendees = @("")
+
+        [Parameter(Mandatory=$true)]
+        [ValidateScript({Test-Path $_ -PathType Container})]
+        [string] $OBSIDIAN_FOLDER,
+
+        [Parameter(Mandatory=$false)]
+        [int] $DaysBack = -30,
+
+        [Parameter(Mandatory=$false)]
+        [int] $DaysForward = 0,
+
+        [Parameter(Mandatory=$false)]
+        [string] $OutlookCategory = "",
+
+        [Parameter(Mandatory=$false)]
+        [string[]] $DefaultAttendees = @()
     )
 
-    if (-not (Get-Process -Name "OUTLOOK" -ErrorAction SilentlyContinue)) {
-        throw "Outlook is not running. Please start Outlook and try again."
+    Begin {
+        # Check if Outlook is running
+        if (-not (Get-Process -Name "OUTLOOK" -ErrorAction SilentlyContinue)) {
+            throw "Outlook is not running. Please start Outlook and try again."
+        }
+
+        # Load required assembly
+        try {
+            Add-Type -AssemblyName "Microsoft.Office.Interop.Outlook" -ErrorAction Stop
+        }
+        catch {
+            throw "Failed to load Microsoft.Office.Interop.Outlook assembly: $_"
+        }
+
+        # Initialize Outlook objects
+        $outlook = $null
+        $namespace = $null
+        $folder = $null
     }
 
-    try {
-        Add-Type -AssemblyName "Microsoft.Office.Interop.Outlook" -ErrorAction Stop
-        $outlook = New-Object -ComObject Outlook.Application
-        $namespace = $outlook.GetNamespace("MAPI")
-        $folder = $namespace.GetDefaultFolder($OUTLOOK_CALENDAR_FOLDER)
+    Process {
+        try {
+            # Create Outlook objects
+            $outlook = New-Object -ComObject Outlook.Application
+            $namespace = $outlook.GetNamespace("MAPI")
+            $folder = $namespace.GetDefaultFolder($OUTLOOK_CALENDAR_FOLDER)
 
-        $startDate = (Get-Date).AddDays($daysBack)
-        $endDate = (Get-Date).AddDays($daysForward + 1).AddSeconds(-1)
+            # Set date range
+            $startDate = (Get-Date).AddDays($DaysBack)
+            $endDate = (Get-Date).AddDays($DaysForward + 1).AddSeconds(-1)
 
-        $items = $folder.Items
-        $items.IncludeRecurrences = $true
-        $items.Sort("[Start]")
-        $filter = "[Start] >= '" + $startDate.ToString("g") + "' AND [End] <= '" + $endDate.ToString("g") + "'"
-        $meetings = $items.Restrict($filter)
+            # Retrieve and filter meetings
+            $items = $folder.Items
+            $items.IncludeRecurrences = $true
+            $items.Sort("[Start]")
+            $filter = "[Start] >= '" + $startDate.ToString("g") + "' AND [End] <= '" + $endDate.ToString("g") + "'"
+            $meetings = $items.Restrict($filter)
 
-        foreach ($meeting in $meetings) {
-            if ($outlookCategory -and $meeting.Categories -notmatch $outlookCategory) { continue }
+            foreach ($meeting in $meetings) {
+                # Apply category filter if specified
+                if ($OutlookCategory -and $meeting.Categories -notmatch $OutlookCategory) { continue }
 
-            $meetingStartTime = $meeting.Start.ToString("yyyy-MM-ddTHH:mm:ss")
-            $meetingStartTimeYear = $meeting.Start.ToString("yyyy")
-            $meetingStartTimeMonth = $meeting.Start.ToString("MM")
-            $meetingSummary = Clean-String $meeting.Subject
-            $meetingBody = Truncate-MeetingBody $meeting.Body.Replace("`r`n", "`n")
+                # Process meeting details
+                $meetingStartTime = $meeting.Start.ToString("yyyy-MM-ddTHH:mm:ss")
+                $meetingStartTimeYear = $meeting.Start.ToString("yyyy")
+                $meetingStartTimeMonth = $meeting.Start.ToString("MM")
+                $meetingSummary = Clean-String $meeting.Subject
+                $meetingBody = Truncate-MeetingBody $meeting.Body.Replace("`r`n", "`n")
 
-            $noteContent = @"
+                # Create note content
+                $noteContent = @"
 ---
 meetingStartTime: $meetingStartTime
 meetingEndTime: $($meeting.End.ToString("yyyy-MM-ddTHH:mm:ss"))
@@ -54,7 +113,7 @@ meetingOrganizer: "$($meeting.Organizer)"
 meetingLocation: "$($meeting.Location)"
 meetingDuration: "$($meeting.Duration)"
 Attendees:
-$(($defaultAttendees | ForEach-Object { "  - '$_'" }) -join "`r`n")
+$(($DefaultAttendees | ForEach-Object { "  - '$_'" }) -join "`r`n")
 tags:
 - meetings
 ---
@@ -79,35 +138,32 @@ $($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
 - [ ]
 
 "@
-            $yearFolder = Join-Path $OBSIDIAN_FOLDER $meetingStartTimeYear
-            $monthFolder = Join-Path $yearFolder $meetingStartTimeMonth
+                # Create folder structure
+                $yearFolder = Join-Path $OBSIDIAN_FOLDER $meetingStartTimeYear
+                $monthFolder = Join-Path $yearFolder $meetingStartTimeMonth
 
-            if (-not (Test-Path $yearFolder))
-            {
-                New-Item -ItemType Directory -Path $yearFolder | Out-Null
-            }
+                New-Item -ItemType Directory -Path $yearFolder, $monthFolder -Force | Out-Null
 
-            if (-not (Test-Path $monthFolder))
-            {
-                New-Item -ItemType Directory -Path $monthFolder | Out-Null
-            }
+                # Create file
+                $fileName = "$($meeting.Start.ToString('yyyy-MM-dd')) $($meetingSummary).md"
+                $filePath = Join-Path $monthFolder $fileName
 
-            $fileName = "$($meeting.Start.ToString('yyyy-MM-dd')) $($meetingSummary).md"
-            $filePath = Join-Path $monthFolder $fileName
-
-            if (Test-Path $filePath) {
-                Write-Host "File already exists, skipping: $filePath"
-            }
-            else {
-                $noteContent | Out-File -FilePath $filePath -Encoding utf8
-                Write-Host "Created note: $filePath"
+                if (Test-Path $filePath) {
+                    Write-Warning "File already exists, skipping: $filePath"
+                }
+                else {
+                    $noteContent | Out-File -FilePath $filePath -Encoding utf8
+                    Write-Verbose "Created note: $filePath"
+                }
             }
         }
+        catch {
+            Write-Error "An error occurred: $_"
+        }
     }
-    catch {
-        Write-Error "An error occurred: $_"
-    }
-    finally {
+
+    End {
+        # Clean up COM objects
         if ($null -ne $namespace) { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($namespace) | Out-Null }
         if ($null -ne $outlook) { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($outlook) | Out-Null }
         [System.GC]::Collect()
@@ -116,16 +172,49 @@ $($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
 }
 
 function Clean-String {
+    <#
+    .SYNOPSIS
+    Cleans a string by replacing or removing specific characters.
+
+    .DESCRIPTION
+    This function takes a string input and replaces or removes characters that might cause issues in file names or markdown syntax.
+
+    .PARAMETER str
+    The input string to be cleaned.
+
+    .EXAMPLE
+    Clean-String "Meeting: [Team] Project Update 2023/07/28"
+    Returns: "Meeting - (Team) Project Update 2023&07&28"
+    #>
+    [CmdletBinding()]
     param([string]$str)
+
     $str -replace '\[', '(' -replace '\]', ')' -replace '//', '&' -replace ':', ' -' -replace '[/\\]', '&' -replace '[\"*:<>?]', '' -replace '[^\w\-_\. ()&]', '_'
 }
 
 function Truncate-MeetingBody {
+    <#
+    .SYNOPSIS
+    Truncates the body of a meeting invitation.
+
+    .DESCRIPTION
+    This function removes standard Microsoft Teams joining information from the meeting body to keep only the relevant content.
+
+    .PARAMETER body
+    The full body text of the meeting invitation.
+
+    .EXAMPLE
+    Truncate-MeetingBody $meetingBody
+    #>
+    [CmdletBinding()]
     param([string]$body)
-    $indices = @(
-        $body.IndexOf("Microsoft Teams Need help?"),
-        $body.IndexOf("Join on your computer, mobile app or room device")
-    ) | Where-Object { $_ -ge 0 }
+
+    $cutoffPhrases = @(
+        "Microsoft Teams Need help?",
+        "Join on your computer, mobile app or room device"
+    )
+
+    $indices = $cutoffPhrases | ForEach-Object { $body.IndexOf($_) } | Where-Object { $_ -ge 0 }
     
     if ($indices.Count -gt 0) {
         $cutoffIndex = ($indices | Measure-Object -Minimum).Minimum
