@@ -211,7 +211,7 @@ function Clean-String {
     $str = $str -replace '\*', '' `
                 -replace '"', "'" `
                 -replace '\\', '-' `
-                -replace '\bw/', 'with' `  # Move this replacement before the general '/' replacement
+                -replace '\bw/', 'with' `
                 -replace '/', '-' `
                 -replace '<', '(' `
                 -replace '>', ')' `
