@@ -122,7 +122,14 @@ function Get-OutlookCalendar {
                 $meetingStartTimeYear = $meeting.Start.ToString("yyyy")
                 $meetingStartTimeMonth = $meeting.Start.ToString("MM")
                 $meetingSummary = Format-StringForObsidian $meeting.Subject
-                $meetingBody = Get-TruncatedMeetingBody $meeting.Body.Replace("`r`n", "`n")
+
+                try {
+                    $meetingBody = Get-TruncatedMeetingBody ($meeting.Body -replace "`r`n", "`n")
+                }
+                catch {
+                    Write-Warning "Error processing meeting body for '$($meeting.Subject)': $_"
+                    $meetingBody = ""
+                }
 
                 Write-Verbose "Creating note content..."
                 $noteContent = @"
@@ -154,7 +161,7 @@ tags:
 > $($meeting.Location)
 
 > [!info]- Meeting Agenda (from Outlook)
-$($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
+$(if ([string]::IsNullOrWhiteSpace($meetingBody)) { "> No agenda available" } else { $meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String })
 
 ## ⭐Agenda/Questions
 
@@ -247,6 +254,11 @@ function Get-TruncatedMeetingBody {
 
     process {
         Write-Verbose "Truncating meeting body..."
+        if ([string]::IsNullOrWhiteSpace($Body)) {
+            Write-Verbose "Meeting body is empty or null"
+            return ""
+        }
+
         $cutoffPhrases = @(
             "Microsoft Teams Need help?",
             "Join on your computer, mobile app or room device"
