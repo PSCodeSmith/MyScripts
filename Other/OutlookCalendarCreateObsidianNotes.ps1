@@ -1,35 +1,52 @@
+<#
+.SYNOPSIS
+Exports Outlook calendar events to Obsidian markdown files.
+
+.DESCRIPTION
+This script retrieves calendar events from Microsoft Outlook and creates corresponding markdown files in a specified Obsidian folder structure. It supports filtering by date range and Outlook category.
+
+.PARAMETER ObsidianFolder
+The root folder where Obsidian markdown files will be created.
+
+.PARAMETER DaysBack
+Number of days in the past to retrieve events for. Default is -30.
+
+.PARAMETER DaysForward
+Number of days in the future to retrieve events for. Default is 0.
+
+.PARAMETER OutlookCategory
+The Outlook category to filter events by. If empty, all events are included.
+
+.PARAMETER DefaultAttendees
+An array of default attendees to add to each meeting note.
+
+.EXAMPLE
+.\Outlook-to-Obsidian.ps1 -ObsidianFolder "C:\ObsidianVault" -DaysBack -7 -DaysForward 7 -OutlookCategory "Work" -Verbose
+
+.NOTES
+Requires Microsoft Outlook to be installed and running.
+#>
+
+[CmdletBinding()]
+param (
+    [Parameter(Mandatory=$true)]
+    [ValidateScript({Test-Path $_ -PathType Container})]
+    [string] $ObsidianFolder,
+
+    [Parameter(Mandatory=$false)]
+    [int] $DaysBack = -30,
+
+    [Parameter(Mandatory=$false)]
+    [int] $DaysForward = 0,
+
+    [Parameter(Mandatory=$false)]
+    [string] $OutlookCategory = "",
+
+    [Parameter(Mandatory=$false)]
+    [string[]] $DefaultAttendees = @()
+)
+
 function Get-OutlookCalendar {
-    <#
-    .SYNOPSIS
-    Exports Outlook calendar events to Obsidian markdown files.
-
-    .DESCRIPTION
-    This function retrieves calendar events from Microsoft Outlook and creates corresponding markdown files in a specified Obsidian folder structure. It supports filtering by date range and Outlook category.
-
-    .PARAMETER OUTLOOK_CALENDAR_FOLDER
-    The Outlook folder constant for the calendar. Default is 9 (olFolderCalendar).
-
-    .PARAMETER OBSIDIAN_FOLDER
-    The root folder where Obsidian markdown files will be created.
-
-    .PARAMETER DaysBack
-    Number of days in the past to retrieve events for. Default is -30.
-
-    .PARAMETER DaysForward
-    Number of days in the future to retrieve events for. Default is 0.
-
-    .PARAMETER OutlookCategory
-    The Outlook category to filter events by. If empty, all events are included.
-
-    .PARAMETER DefaultAttendees
-    An array of default attendees to add to each meeting note.
-
-    .EXAMPLE
-    Get-OutlookCalendar -OBSIDIAN_FOLDER "C:\ObsidianVault" -DaysBack -7 -DaysForward 7 -OutlookCategory "Work"
-
-    .NOTES
-    Requires Microsoft Outlook to be installed and running.
-    #>
     [CmdletBinding()]
     param (
         [Parameter(Mandatory=$false)]
@@ -53,20 +70,22 @@ function Get-OutlookCalendar {
     )
 
     Begin {
-        # Check if Outlook is running
+        Write-Verbose "Starting Get-OutlookCalendar function"
+        Write-Verbose "Checking if Outlook is running..."
         if (-not (Get-Process -Name "OUTLOOK" -ErrorAction SilentlyContinue)) {
             throw "Outlook is not running. Please start Outlook and try again."
         }
+        Write-Verbose "Outlook is running"
 
-        # Load required assembly
+        Write-Verbose "Loading Microsoft.Office.Interop.Outlook assembly..."
         try {
             Add-Type -AssemblyName "Microsoft.Office.Interop.Outlook" -ErrorAction Stop
+            Write-Verbose "Microsoft.Office.Interop.Outlook assembly loaded successfully"
         }
         catch {
             throw "Failed to load Microsoft.Office.Interop.Outlook assembly: $_"
         }
 
-        # Initialize Outlook objects
         $outlook = $null
         $namespace = $null
         $folder = $null
@@ -74,34 +93,38 @@ function Get-OutlookCalendar {
 
     Process {
         try {
-            # Create Outlook objects
+            Write-Verbose "Creating Outlook COM objects..."
             $outlook = New-Object -ComObject Outlook.Application
             $namespace = $outlook.GetNamespace("MAPI")
             $folder = $namespace.GetDefaultFolder($OUTLOOK_CALENDAR_FOLDER)
+            Write-Verbose "Outlook COM objects created successfully"
 
-            # Set date range
             $startDate = (Get-Date).AddDays($DaysBack)
             $endDate = (Get-Date).AddDays($DaysForward + 1).AddSeconds(-1)
+            Write-Verbose "Date range set: $startDate to $endDate"
 
-            # Retrieve and filter meetings
+            Write-Verbose "Retrieving and filtering meetings..."
             $items = $folder.Items
             $items.IncludeRecurrences = $true
             $items.Sort("[Start]")
             $filter = "[Start] >= '" + $startDate.ToString("g") + "' AND [End] <= '" + $endDate.ToString("g") + "'"
             $meetings = $items.Restrict($filter)
+            Write-Verbose "Retrieved $($meetings.Count) meetings"
 
             foreach ($meeting in $meetings) {
-                # Apply category filter if specified
-                if ($OutlookCategory -and $meeting.Categories -notmatch $OutlookCategory) { continue }
+                if ($OutlookCategory -and $meeting.Categories -notmatch $OutlookCategory) { 
+                    Write-Verbose "Skipping meeting '$($meeting.Subject)' due to category mismatch"
+                    continue 
+                }
 
-                # Process meeting details
+                Write-Verbose "Processing meeting: $($meeting.Subject)"
                 $meetingStartTime = $meeting.Start.ToString("yyyy-MM-ddTHH:mm:ss")
                 $meetingStartTimeYear = $meeting.Start.ToString("yyyy")
                 $meetingStartTimeMonth = $meeting.Start.ToString("MM")
-                $meetingSummary = Clean-String $meeting.Subject
-                $meetingBody = Truncate-MeetingBody $meeting.Body.Replace("`r`n", "`n")
+                $meetingSummary = Format-StringForObsidian $meeting.Subject
+                $meetingBody = Get-TruncatedMeetingBody $meeting.Body.Replace("`r`n", "`n")
 
-                # Create note content
+                Write-Verbose "Creating note content..."
                 $noteContent = @"
 ---
 meetingStartTime: $meetingStartTime
@@ -149,13 +172,13 @@ $($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
 - [ ] 
 
 "@
-                # Create folder structure
+                Write-Verbose "Creating folder structure..."
                 $yearFolder = Join-Path $OBSIDIAN_FOLDER $meetingStartTimeYear
                 $monthFolder = Join-Path $yearFolder $meetingStartTimeMonth
 
                 New-Item -ItemType Directory -Path $yearFolder, $monthFolder -Force | Out-Null
+                Write-Verbose "Folder structure created: $monthFolder"
 
-                # Create file
                 $fileName = "$($meeting.Start.ToString('yyyy-MM-dd')) $($meetingSummary).md"
                 $filePath = Join-Path $monthFolder $fileName
 
@@ -174,90 +197,83 @@ $($meetingBody -split "`n" | ForEach-Object { "> $_ " } | Out-String)
     }
 
     End {
-        # Clean up COM objects
+        Write-Verbose "Cleaning up COM objects..."
         if ($null -ne $namespace) { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($namespace) | Out-Null }
         if ($null -ne $outlook) { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($outlook) | Out-Null }
         [System.GC]::Collect()
         [System.GC]::WaitForPendingFinalizers()
+        Write-Verbose "COM objects cleaned up"
+        Write-Verbose "Get-OutlookCalendar function completed"
     }
 }
 
-function Clean-String {
-    <#
-    .SYNOPSIS
-    Cleans a string for use as an Obsidian note name, removing or replacing all illegal characters and preventing unintended formatting.
-
-    .DESCRIPTION
-    This function takes a string input and removes or replaces all characters that are illegal in Obsidian note names (* " \ / < > : | ?). 
-    It preserves common date formats, replaces some common abbreviations with more readable alternatives, and prevents unintended formatting in Obsidian data views by removing underscores in specific positions.
-
-    .PARAMETER str
-    The input string to be cleaned.
-
-    .EXAMPLE
-    Clean-String "Meeting: [Team] * _Project Update_ * 2023/07/28 | Status w/ Management?"
-    Returns: "Meeting - (Team) Project Update 2023-07-28 - Status with Management"
-    #>
+function Format-StringForObsidian {
     [CmdletBinding()]
-    param([string]$str)
-
-    # First, protect date formats
-    $str = $str -replace '(\d{4})/(\d{2})/(\d{2})', '$1-$2-$3'
-
-    # Remove underscores that could cause unintended formatting (single line version)
-    $str = $str -replace '\s_(\w)', ' $1' -replace '(\w)_\s', '$1 ' -replace '(\w)_(\W)', '$1$2' -replace '(\W)_(\w)', '$1$2'
-
-    # Then perform other replacements
-    $str = $str -replace '\*', '' `
-                -replace '"', "'" `
-                -replace '\\', '-' `
-                -replace '\bw/', 'with' `
-                -replace '/', '-' `
-                -replace '<', '(' `
-                -replace '>', ')' `
-                -replace ':', ' -' `
-                -replace '\|', '-' `
-                -replace '\?', '' `
-                -replace '\[', '(' `
-                -replace '\]', ')'
-
-    # Trim any leading or trailing spaces and dashes
-    $str = $str.Trim(' -')
-
-    # Replace any multiple spaces or dashes with a single instance
-    $str = $str -replace '\s+', ' ' `
-                -replace '-+', '-'
-
-    return $str
-}
-
-function Truncate-MeetingBody {
-    <#
-    .SYNOPSIS
-    Truncates the body of a meeting invitation.
-
-    .DESCRIPTION
-    This function removes standard Microsoft Teams joining information from the meeting body to keep only the relevant content.
-
-    .PARAMETER body
-    The full body text of the meeting invitation.
-
-    .EXAMPLE
-    Truncate-MeetingBody $meetingBody
-    #>
-    [CmdletBinding()]
-    param([string]$body)
-
-    $cutoffPhrases = @(
-        "Microsoft Teams Need help?",
-        "Join on your computer, mobile app or room device"
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$InputString
     )
 
-    $indices = $cutoffPhrases | ForEach-Object { $body.IndexOf($_) } | Where-Object { $_ -ge 0 }
-    
-    if ($indices.Count -gt 0) {
-        $cutoffIndex = ($indices | Measure-Object -Minimum).Minimum
-        return $body.Substring(0, $cutoffIndex).Trim()
+    process {
+        Write-Verbose "Formatting string for Obsidian: '$InputString'"
+        $formattedString = $InputString -replace '(\d{4})/(\d{2})/(\d{2})', '$1-$2-$3'
+        $formattedString = $formattedString -replace '\s_(\w)', ' $1' -replace '(\w)_\s', '$1 ' -replace '(\w)_(\W)', '$1$2' -replace '(\W)_(\w)', '$1$2'
+        $formattedString = $formattedString -replace '\*', '' `
+                    -replace '"', "'" `
+                    -replace '\\', '-' `
+                    -replace '\bw/', 'with' `
+                    -replace '/', '-' `
+                    -replace '<', '(' `
+                    -replace '>', ')' `
+                    -replace ':', ' -' `
+                    -replace '\|', '-' `
+                    -replace '\?', '' `
+                    -replace '\[', '(' `
+                    -replace '\]', ')'
+        $formattedString = $formattedString.Trim(' -')
+        $formattedString = $formattedString -replace '\s+', ' ' `
+                    -replace '-+', '-'
+        Write-Verbose "Formatted string: '$formattedString'"
+        return $formattedString
     }
-    return $body
 }
+
+function Get-TruncatedMeetingBody {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+        [string]$Body
+    )
+
+    process {
+        Write-Verbose "Truncating meeting body..."
+        $cutoffPhrases = @(
+            "Microsoft Teams Need help?",
+            "Join on your computer, mobile app or room device"
+        )
+
+        $indices = $cutoffPhrases | ForEach-Object { $Body.IndexOf($_) } | Where-Object { $_ -ge 0 }
+        
+        if ($indices.Count -gt 0) {
+            $cutoffIndex = ($indices | Measure-Object -Minimum).Minimum
+            $truncatedBody = $Body.Substring(0, $cutoffIndex).Trim()
+            Write-Verbose "Meeting body truncated at index $cutoffIndex"
+        } else {
+            $truncatedBody = $Body
+            Write-Verbose "No cutoff phrases found, returning full body"
+        }
+        return $truncatedBody
+    }
+}
+
+# Main execution
+Write-Verbose "Script started with parameters:"
+Write-Verbose "ObsidianFolder: $ObsidianFolder"
+Write-Verbose "DaysBack: $DaysBack"
+Write-Verbose "DaysForward: $DaysForward"
+Write-Verbose "OutlookCategory: $OutlookCategory"
+Write-Verbose "DefaultAttendees: $($DefaultAttendees -join ', ')"
+
+Get-OutlookCalendar -OBSIDIAN_FOLDER $ObsidianFolder -DaysBack $DaysBack -DaysForward $DaysForward -OutlookCategory $OutlookCategory -DefaultAttendees $DefaultAttendees -Verbose
+
+Write-Verbose "Script completed"
