@@ -193,13 +193,14 @@ function Clean-String {
     # First, protect date formats
     $str = $str -replace '(\d{4})/(\d{2})/(\d{2})', '$1-$2-$3'
 
-    # Remove underscores that could cause unintended formatting
+    # Remove underscores that could cause unintended formatting (single line version)
     $str = $str -replace '\s_(\w)', ' $1' -replace '(\w)_\s', '$1 ' -replace '(\w)_(\W)', '$1$2' -replace '(\W)_(\w)', '$1$2'
 
     # Then perform other replacements
     $str = $str -replace '\*', '' `
                 -replace '"', "'" `
                 -replace '\\', '-' `
+                -replace '\bw/', 'with' `  # Move this replacement before the general '/' replacement
                 -replace '/', '-' `
                 -replace '<', '(' `
                 -replace '>', ')' `
@@ -207,8 +208,7 @@ function Clean-String {
                 -replace '\|', '-' `
                 -replace '\?', '' `
                 -replace '\[', '(' `
-                -replace '\]', ')' `
-                -replace '\bw/', 'with'
+                -replace '\]', ')'
 
     # Trim any leading or trailing spaces and dashes
     $str = $str.Trim(' -')
