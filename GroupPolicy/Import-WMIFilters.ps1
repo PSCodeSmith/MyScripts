@@ -1,32 +1,39 @@
 <#
 .SYNOPSIS
-  This script imports WMI filters from MOF files located in a specified folder into the current domain.
+  Imports WMI filters from MOF files located in a specified folder into the current domain.
 
 .DESCRIPTION
-  The script first validates the folder path and retrieves the current domain name. It then iterates through
-  each MOF file in the folder, calling the Import-WmiFilter function to import the WMI filter into the domain.
+  This script takes a folder path containing MOF files that define WMI filters and imports them
+  into the current Active Directory domain. It retrieves the current domain, enumerates all MOF files
+  in the specified folder, and for each MOF file, it creates a corresponding WMI filter object in AD.
+
+  The WMI filter metadata (Name, Query, QueryLanguage, TargetNameSpace) is extracted from the MOF file.
+  Additional metadata (Author, CreationDate) are also set during the creation process.
 
 .PARAMETER FolderPath
-  Specifies the folder path where the MOF files are located. This is a mandatory parameter.
+  The path to the folder containing the MOF files. This parameter is mandatory.
 
 .EXAMPLE
-  .\Your_Script_Name.ps1 -FolderPath "C:\MOF_Files"
-  This example imports all WMI filters from MOF files located in C:\MOF_Files into the current domain.
+  .\Import-WmiFilters.ps1 -FolderPath "C:\MOF_Files"
+  Imports all WMI filters defined in MOF files located under C:\MOF_Files into the current AD domain.
 
 .NOTES
   Author: Micah
+  The script requires appropriate permissions to create WMI filters in AD.
+  Ensure that you have the necessary modules and permissions loaded.
 
 .INPUTS
-  FolderPath
+  FolderPath (String)
 
 .OUTPUTS
   None
 #>
+
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [Parameter(Mandatory = $true)]
     [ValidateScript({
-        if (-Not (Test-Path $_)) {
+        if (-not (Test-Path $_)) {
             throw "Folder not found at path: $_"
         }
         $true
@@ -37,36 +44,33 @@ param(
 function Import-WmiFilter {
     <#
     .SYNOPSIS
-    This function imports a WMI filter using information parsed from a MOF file.
+      Imports a WMI filter from a specified MOF file into the given domain.
 
     .DESCRIPTION
-    The function reads the MOF file specified by the -Path parameter and then creates
-    a new WMI filter in the specified domain.
+      This function reads a MOF file, extracts the WMI filter properties (Name, Query,
+      QueryLanguage, TargetNameSpace), and then creates a corresponding WMI filter in AD
+      under CN=WMI Filters,CN=Policies,CN=System,<domain>. It also sets metadata such as
+      Author and CreationDate. After creation, it validates the presence of the WMI filter
+      to ensure successful import.
 
     .PARAMETER Path
-    Specifies the path to the MOF file.
+      The full path to the MOF file from which to import the WMI filter.
 
     .PARAMETER Domain
-    Specifies the domain where the WMI filter will be created.
+      The FQDN of the domain in which the WMI filter is to be created.
 
     .EXAMPLE
-    Import-WmiFilter -Path "C:\example.mof" -Domain "example.com"
-    This example imports a WMI filter from the MOF file located at C:\example.mof into the domain example.com.
+      Import-WmiFilter -Path "C:\example.mof" -Domain "example.com"
 
     .NOTES
-    Author: Micah
-
-    .INPUTS
-    Path, Domain
-
-    .OUTPUTS
-    None
+      Author: Micah
     #>
-    [CmdletBinding()]
+
+    [CmdletBinding(SupportsShouldProcess = $true)]
     param(
         [Parameter(Mandatory = $true)]
         [ValidateScript({
-            if (-Not (Test-Path $_)) {
+            if (-not (Test-Path $_)) {
                 throw "MOF file not found at path: $_"
             }
             $true
@@ -78,68 +82,76 @@ function Import-WmiFilter {
     )
 
     try {
-        # Read MOF content
+        # Read the entire MOF file
         $MofContent = Get-Content -Path $Path -Raw
 
-        # Parse MOF content
-        $Name = ($MofContent -split "`n" | Select-String -Pattern 'Name =').ToString().Split('"')[1]
-        $Query = ($MofContent -split "`n" | Select-String -Pattern 'Query =').ToString().Split('"')[1]
-        $QueryLanguage = ($MofContent -split "`n" | Select-String -Pattern 'QueryLanguage =').ToString().Split('"')[1]
-        $TargetNameSpace = ($MofContent -split "`n" | Select-String -Pattern 'TargetNameSpace =').ToString().Split('"')[1]
+        # Extract required properties
+        # These assume a specific structure in the MOF file. If the MOF structure changes,
+        # adjustments may be needed.
+        $Name           = ($MofContent -split "`n" | Select-String -Pattern 'Name =').ToString().Split('"')[1]
+        $Query          = ($MofContent -split "`n" | Select-String -Pattern 'Query =').ToString().Split('"')[1]
+        $QueryLanguage  = ($MofContent -split "`n" | Select-String -Pattern 'QueryLanguage =').ToString().Split('"')[1]
+        $TargetNameSpace= ($MofContent -split "`n" | Select-String -Pattern 'TargetNameSpace =').ToString().Split('"')[1]
 
         # Metadata
         $CreationDate = (Get-Date).ToString('yyyyMMddHHmmss.ffffff')
-        $Author = $env:USERNAME
+        $Author       = $env:USERNAME
 
-        # LDAP Operations
+        # LDAP Path for the domain root
         $ldapPath = "LDAP://$Domain"
-        $rootDSE = New-Object System.DirectoryServices.DirectoryEntry($ldapPath)
-        $gpmcContainer = $rootDSE.Children.Find("CN=Policies,CN=System")
-        $ID = [guid]::NewGuid().ToString()
-        $wmiFilterContainer = $gpmcContainer.Children.Add("CN=$ID,CN=WMI Filters", "msWMI-SomFilter")
+        $rootDSE  = New-Object System.DirectoryServices.DirectoryEntry($ldapPath)
 
-        # Set properties
-        $wmiFilterContainer.Properties["displayName"].Value = $Name
-        $wmiFilterContainer.Properties["msWMI-Query"].Value = $Query
-        $wmiFilterContainer.Properties["msWMI-QueryLanguage"].Value = $QueryLanguage
-        $wmiFilterContainer.Properties["msWMI-TargetNamespace"].Value = $TargetNameSpace
-        $wmiFilterContainer.Properties["msWMI-Author"].Value = $Author
-        $wmiFilterContainer.Properties["msWMI-CreationDate"].Value = $CreationDate
+        # Find the Policies container
+        $policiesContainer = $rootDSE.Children.Find("CN=Policies,CN=System")
 
-        # Commit changes
-        $wmiFilterContainer.CommitChanges()
-
-        # Validation
-        $searcher = New-Object System.DirectoryServices.DirectorySearcher($rootDSE)
-        $searcher.Filter = "(&(objectClass=msWMI-SomFilter)(displayName=$Name))"
-        $searchResult = $searcher.FindOne()
-
-        if ($null -ne $searchResult) {
-            Write-Verbose "WMI Filter '$Name' has been imported successfully."
+        # If container for WMI filters doesn't exist, attempt to find it first
+        $wmiContainer = $policiesContainer.Children | Where-Object { $_.Name -eq "CN=WMI Filters" }
+        if (-not $wmiContainer) {
+            Write-Error "WMI Filters container not found in domain $Domain. Ensure your AD structure is correct."
+            return
         }
-        else {
-            Write-Error "Failed to validate the imported WMI filter: '$Name'"
+
+        # Create a unique GUID for the new WMI filter object
+        $ID = [guid]::NewGuid().ToString()
+        $newFilter = $wmiContainer.Children.Add("CN=$ID", "msWMI-SomFilter")
+
+        # Set the required properties
+        $newFilter.Properties["displayName"].Value        = $Name
+        $newFilter.Properties["msWMI-Query"].Value        = $Query
+        $newFilter.Properties["msWMI-QueryLanguage"].Value= $QueryLanguage
+        $newFilter.Properties["msWMI-TargetNamespace"].Value = $TargetNameSpace
+        $newFilter.Properties["msWMI-Author"].Value       = $Author
+        $newFilter.Properties["msWMI-CreationDate"].Value = $CreationDate
+
+        if ($PSCmdlet.ShouldProcess("WMI Filter '$Name' in domain '$Domain'")) {
+            # Commit the changes to the directory
+            $newFilter.CommitChanges()
+
+            # Validate creation
+            $searcher = New-Object System.DirectoryServices.DirectorySearcher($rootDSE)
+            $searcher.Filter = "(&(objectClass=msWMI-SomFilter)(displayName=$Name))"
+            $searchResult = $searcher.FindOne()
+
+            if ($null -ne $searchResult) {
+                Write-Verbose "WMI Filter '$Name' imported successfully."
+            }
+            else {
+                Write-Error "Failed to validate the imported WMI filter: '$Name'"
+            }
         }
     }
     catch {
-        Write-Error "Error importing WMI filter: $_"
+        Write-Error "Error importing WMI filter from '$Path': $($_.Exception.Message)"
     }
 }
 
-# Validate the folder path
-if (-not (Test-Path -Path $FolderPath)) {
-    Write-Error "Folder not found at path: $FolderPath"
-    return
-}
-
 try {
-    # Get the current domain name using DirectoryServices.ActiveDirectory.Domain class
+    # Determine the current domain
     $CurrentDomain = [System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain().Name
 
-    # Fetch .mof files from the specified folder
+    # Retrieve all .mof files from the specified folder (recursively)
     $MofFiles = Get-ChildItem -Path $FolderPath -Filter "*.mof" -Recurse -ErrorAction Stop
 
-    # Process each .mof file
     foreach ($MofFile in $MofFiles) {
         if ($PSCmdlet.ShouldProcess($MofFile.FullName, "Import WMI Filter")) {
             Import-WmiFilter -Path $MofFile.FullName -Domain $CurrentDomain
@@ -147,5 +159,5 @@ try {
     }
 }
 catch {
-    Write-Error "An error occurred: $_"
+    Write-Error "An error occurred during the WMI filters import process: $($_.Exception.Message)"
 }

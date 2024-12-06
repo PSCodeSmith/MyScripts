@@ -1,146 +1,192 @@
 <#
-	.SYNOPSIS
-		Checks the WinRM service status, configuration settings, firewall rules, and SSL certificate (if required).
-	
-	.DESCRIPTION
-		This script performs an audit of the WinRM configuration on the local system. It checks the WinRM service status,
-		configuration settings, firewall rules, and SSL certificate if the -CheckHttps switch is provided.
-	
-	.PARAMETER CheckHttps
-		A switch parameter to include or exclude the HTTPS portion check.
-	
-	.EXAMPLE
-		.\Check-WinRMConfig.ps1
-		
-		This will run the script without checking the SSL certificate configuration.
-	
-	.EXAMPLE
-		.\Check-WinRMConfig.ps1 -CheckHttps
-		
-		This will run the script and include the SSL certificate check.
-	
-	.OUTPUTS
-		String messages indicating the status and remediation actions for each check.
-	
-	.NOTES
-		Author: Micah
-	
-	.INPUTS
-		None
+.SYNOPSIS
+    Performs a comprehensive audit of the local WinRM configuration, including service status, configuration settings, 
+    firewall rules, and (optionally) SSL certificate configuration for HTTPS.
+
+.DESCRIPTION
+    This script checks the following aspects of the WinRM configuration on the local machine:
+    - WinRM service status
+    - WinRM configuration settings (AllowUnencrypted and Basic authentication)
+    - Firewall rules associated with WinRM (HTTP and optionally HTTPS)
+    - SSL certificate binding for WinRM over HTTPS (if -CheckHttps is specified)
+
+    The script provides PASS/FAIL results for each check, along with recommended remediation steps if any issues are identified.
+
+.PARAMETER CheckHttps
+    When specified, also checks the HTTPS firewall rules and SSL certificate binding.
+
+.EXAMPLE
+    .\Check-WinRMConfig.ps1
+
+    Performs all checks except the HTTPS-specific certificate configuration.
+
+.EXAMPLE
+    .\Check-WinRMConfig.ps1 -CheckHttps
+
+    Performs all checks, including the HTTPS firewall rules and SSL certificate configuration.
+
+.NOTES
+    Author: Micah (Original)
+    Revised by: [Your Name]
+
+.INPUTS
+    None
+
+.OUTPUTS
+    Informational messages, warnings, and error messages describing the configuration state and any recommended remediation.
 #>
-[CmdletBinding()]
+
+[CmdletBinding(SupportsShouldProcess=$true, ConfirmImpact='Low')]
 param
 (
-	[switch]$CheckHttps
+    [switch]$CheckHttps
 )
 
-#region Functions
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Continue'
 
-# Function to check the WinRM service status
+#region Helper Functions
+
+function Write-Pass([string]$Message)
+{
+    Write-Host ("PASS: {0}" -f $Message) -ForegroundColor Green
+}
+
+function Write-Fail([string]$Message)
+{
+    Write-Host ("FAIL: {0}" -f $Message) -ForegroundColor Red
+}
+
+function Write-Remediation([string]$Message)
+{
+    Write-Warning ("Remediation: {0}" -f $Message)
+}
+
+#endregion
+
+#region Test Functions
+
 function Test-WinRMService
 {
-	Write-Output "Checking WinRM service status..."
-	$winrmService = Get-Service -Name WinRM
-	if ($winrmService.Status -eq 'Running')
-	{
-		Write-Output "PASS: WinRM service is running."
-	}
-	else
-	{
-		Write-Error "FAIL: WinRM service is not running."
-		Write-Warning "Remediation: Start the WinRM service using the following command:`nStart-Service -Name WinRM"
-	}
+    Write-Verbose "Checking WinRM service status..."
+    try
+    {
+        $winrmService = Get-Service -Name 'WinRM' -ErrorAction Stop
+        if ($winrmService.Status -eq 'Running')
+        {
+            Write-Pass "WinRM service is running."
+        }
+        else
+        {
+            Write-Fail "WinRM service is not running."
+            Write-Remediation "Run: Start-Service -Name WinRM"
+        }
+    }
+    catch
+    {
+        Write-Error "Unable to retrieve WinRM service status. Ensure that the 'WinRM' service exists."
+    }
 }
 
-# Function to check the WinRM configuration settings
 function Test-WinRMConfig
 {
-	Write-Output "Checking WinRM configuration settings..."
-	$winrmConfig = Invoke-Expression -Command 'winrm get winrm/config'
-	if ($winrmConfig -match "AllowUnencrypted\s+=\s+false")
-	{
-		Write-Output "PASS: Unencrypted communication is disabled."
-	}
-	else
-	{
-		Write-Error "FAIL: Unencrypted communication is enabled."
-		Write-Warning "Remediation: Disable unencrypted communication by running:`nwinrm set winrm/config/service @{AllowUnencrypted=`"false`"}"
-	}
-	
-	if ($winrmConfig -match "Basic\s+=\s+true")
-	{
-		Write-Output "PASS: Basic authentication is enabled."
-	}
-	else
-	{
-		Write-Error "FAIL: Basic authentication is disabled."
-		Write-Warning "Remediation: Enable basic authentication by running:`nwinrm set winrm/config/service @{Basic=`"true`"}"
-	}
+    Write-Verbose "Checking WinRM configuration settings..."
+    try
+    {
+        $winrmConfig = winrm get winrm/config 2>&1
+        if ($winrmConfig -match "AllowUnencrypted\s+=\s+false")
+        {
+            Write-Pass "Unencrypted communication is disabled."
+        }
+        else
+        {
+            Write-Fail "Unencrypted communication is enabled."
+            Write-Remediation "Disable unencrypted communication: winrm set winrm/config/service @{AllowUnencrypted=`"false`"}"
+        }
+
+        if ($winrmConfig -match "Basic\s+=\s+true")
+        {
+            Write-Pass "Basic authentication is enabled."
+        }
+        else
+        {
+            Write-Fail "Basic authentication is disabled."
+            Write-Remediation "Enable basic authentication: winrm set winrm/config/service @{Basic=`"true`"}"
+        }
+    }
+    catch
+    {
+        Write-Error "Failed to retrieve WinRM configuration. Ensure that WinRM is installed and accessible."
+    }
 }
 
-# Function to check the firewall rules for WinRM
 function Test-FirewallRules
 {
-	Write-Output "Checking firewall rules for WinRM..."
-	# Check HTTP rule for Domain profile
-	$httpRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTP-In)" -and $_.Profile -like '*Domain*' }
-	if ($null -eq $httpRule)
-	{
-		Write-Error "FAIL: Firewall rule for WinRM over HTTP is not found in the Domain profile."
-		Write-Warning "Remediation: Create the required firewall rule in the Domain profile or consult your system documentation to configure WinRM over HTTP."
-	}
-	elseif ($httpRule.Enabled -eq $false)
-	{
-		Write-Error "FAIL: Firewall rule for WinRM over HTTP is disabled in the Domain profile."
-		Write-Warning "Remediation: Enable the firewall rule in the Domain profile by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTP-In)'"
-	}
-	else
-	{
-		Write-Output "PASS: Firewall rule for WinRM over HTTP is enabled in the Domain profile."
-	}
-	
-	# Check HTTPS rule for Domain profile if applicable
-	If ($CheckHttps)
-	{
-		$httpsRule = Get-NetFirewallRule | Where-Object { $_.DisplayName -like "Windows Remote Management (HTTPS-In)" -and $_.Profile -like '*Domain*' }
-		if ($null -eq $httpsRule)
-		{
-			Write-Error "FAIL: Firewall rule for WinRM over HTTPS is not found in the Domain profile."
-			Write-Warning "Remediation: Create the required firewall rule in the Domain profile or consult your system documentation to configure WinRM over HTTPS."
-		}
-		elseif ($httpsRule.Enabled -eq $false)
-		{
-			Write-Error "FAIL: Firewall rule for WinRM over HTTPS is disabled in the Domain profile."
-			Write-Warning "Remediation: Enable the firewall rule in the Domain profile by running:`nEnable-NetFirewallRule -DisplayName 'Windows Remote Management (HTTPS-In)'"
-		}
-		else
-		{
-			Write-Output "PASS: Firewall rule for WinRM over HTTPS is enabled in the Domain profile."
-		}
-	}
+    Write-Verbose "Checking firewall rules for WinRM..."
+
+    # Helper function to validate firewall rules
+    function Check-FirewallRule([string]$DisplayName, [string]$Protocol)
+    {
+        $rule = Get-NetFirewallRule -DisplayName $DisplayName -ErrorAction SilentlyContinue | 
+                Where-Object { $_.Profile -like '*Domain*' }
+
+        if (-not $rule)
+        {
+            Write-Fail "Firewall rule for WinRM over $Protocol is not found in the Domain profile."
+            Write-Remediation "Create or enable the firewall rule for WinRM ($Protocol) in the Domain profile."
+            return
+        }
+
+        if ($rule.Enabled -eq $false)
+        {
+            Write-Fail "Firewall rule for WinRM over $Protocol is disabled in the Domain profile."
+            Write-Remediation "Enable the firewall rule: Enable-NetFirewallRule -DisplayName '$DisplayName'"
+        }
+        else
+        {
+            Write-Pass "Firewall rule for WinRM over $Protocol is enabled in the Domain profile."
+        }
+    }
+
+    # Check HTTP
+    Check-FirewallRule "Windows Remote Management (HTTP-In)" "HTTP"
+
+    # Check HTTPS if requested
+    if ($CheckHttps)
+    {
+        Check-FirewallRule "Windows Remote Management (HTTPS-In)" "HTTPS"
+    }
 }
 
-# Function to check the SSL certificate for WinRM
 function Test-SSLCertificate
 {
-	Write-Output "Checking SSL certificate for WinRM..."
-	$httpsBinding = Get-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{ Address = "*"; Transport = "HTTPS" }
-	if ($null -ne $httpsBinding)
-	{
-		Write-Output "PASS: HTTPS binding is configured."
-	}
-	else
-	{
-		Write-Error "FAIL: HTTPS binding is not configured."
-		Write-Warning "Remediation: Follow these steps to configure HTTPS binding:`n1. Create or import a valid SSL certificate.`n2. Bind the certificate to WinRM using the following command:`nNew-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address=`"*`"; Transport=`"HTTPS`"} -ValueSet @{CertificateThumbprint=`"Your-Certificate-Thumbprint`"}"
-	}
+    Write-Verbose "Checking WinRM SSL certificate configuration..."
+    try
+    {
+        $httpsBinding = Get-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{ Address="*"; Transport="HTTPS" } -ErrorAction Stop
+        if ($httpsBinding -and $httpsBinding.CertificateThumbprint -and $httpsBinding.CertificateThumbprint -ne '')
+        {
+            Write-Pass "HTTPS binding is configured with a certificate."
+        }
+        else
+        {
+            Write-Fail "HTTPS binding is not properly configured."
+            Write-Remediation "1. Obtain a valid SSL certificate. `n2. Bind the certificate to WinRM using: 
+New-WSManInstance -ResourceURI winrm/config/Listener -SelectorSet @{Address=`"*`"; Transport=`"HTTPS`"} -ValueSet @{CertificateThumbprint=`"Your-Certificate-Thumbprint`"}"
+        }
+    }
+    catch
+    {
+        Write-Fail "Could not retrieve HTTPS binding configuration."
+        Write-Remediation "Ensure WinRM is installed and configured properly. Then run the New-WSManInstance command as described."
+    }
 }
 
-#endregion Functions
+#endregion
 
-Write-Output "Starting WinRM configuration check..."
+Write-Host "Starting WinRM configuration check..." -ForegroundColor Cyan
 Test-WinRMService
 Test-WinRMConfig
 Test-FirewallRules
-If ($CheckHttps) { Test-SSLCertificate }
-Write-Output "WinRM configuration check completed."
+if ($CheckHttps) { Test-SSLCertificate }
+Write-Host "WinRM configuration check completed." -ForegroundColor Cyan
